@@ -120,7 +120,9 @@ def main() -> int:
         description="Run the full tech-news-digest data pipeline in one shot.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("--defaults", type=Path, required=True, help="Skill defaults config dir")
+    _script_dir = Path(__file__).resolve().parent
+    _default_defaults = _script_dir.parent / "config" / "defaults"
+    parser.add_argument("--defaults", type=Path, default=_default_defaults, help="Skill defaults config dir (default: <skill>/config/defaults)")
     parser.add_argument("--config", type=Path, default=None, help="User config overlay dir")
     parser.add_argument("--hours", type=int, default=48, help="Time window in hours")
     parser.add_argument("--freshness", type=str, default="pd", help="Web search freshness (pd/pw/pm)")
