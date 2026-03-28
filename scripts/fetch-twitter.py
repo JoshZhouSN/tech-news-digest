@@ -769,6 +769,13 @@ class BirdBackend(TwitterBackend):
     def _parse_date(date_str: str) -> Optional[datetime]:
         return _parse_iso_datetime(date_str)
 
+    @staticmethod
+    def _is_rate_limit_error(result: Dict[str, Any]) -> bool:
+        if result.get("status") != "error":
+            return False
+        error_msg = str(result.get("error", "")).lower()
+        return "429" in error_msg or "rate limit" in error_msg
+
     def _parse_tweets_payload(self, payload: Any, handle: str, topics: list, cutoff: datetime) -> list:
         tweets = payload.get("tweets", []) if isinstance(payload, dict) else payload
         if not isinstance(tweets, list):
@@ -855,18 +862,45 @@ class BirdBackend(TwitterBackend):
         results: List[Dict[str, Any]] = []
         total = len(sources)
         done = 0
-        with ThreadPoolExecutor(max_workers=self.max_workers) as pool:
-            futures = {pool.submit(self._fetch_user_tweets, source, cutoff): source
-                       for source in sources}
-            for future in as_completed(futures):
-                result = future.result()
+        consecutive_429 = 0
+
+        for index, source in enumerate(sources, start=1):
+            if consecutive_429 >= self.max_consecutive_429:
+                result = self._make_error(
+                    source,
+                    f"Bird rate limit guard activated after {self.max_consecutive_429} consecutive 429 errors",
+                    0,
+                )
                 results.append(result)
                 done += 1
-                if result["status"] == "ok":
-                    logging.info(f"[{done}/{total}] ✅ @{result['handle']}: {result['count']} tweets"
-                                 + (f" (top: {result['articles'][0]['metrics']['like_count']}❤️)" if result['articles'] else ""))
-                else:
-                    logging.warning(f"[{done}/{total}] ❌ @{result['handle']}: {result['error']}")
+                logging.warning(f"[{done}/{total}] ❌ @{result['handle']}: {result['error']}")
+                continue
+
+            result = self._fetch_user_tweets(source, cutoff)
+            results.append(result)
+            done += 1
+
+            if result["status"] == "ok":
+                logging.info(f"[{done}/{total}] ✅ @{result['handle']}: {result['count']} tweets"
+                             + (f" (top: {result['articles'][0]['metrics']['like_count']}❤️)" if result['articles'] else ""))
+            else:
+                logging.warning(f"[{done}/{total}] ❌ @{result['handle']}: {result['error']}")
+
+            if self._is_rate_limit_error(result):
+                consecutive_429 += 1
+                if self.cooldown_429_sec > 0:
+                    time.sleep(self.cooldown_429_sec)
+            else:
+                consecutive_429 = 0
+
+            if index >= total:
+                continue
+
+            if self.batch_size > 0 and index % self.batch_size == 0 and self.batch_cooldown_sec > 0:
+                time.sleep(self.batch_cooldown_sec)
+
+            if self.request_interval_sec > 0:
+                time.sleep(self.request_interval_sec)
 
         return results
 
