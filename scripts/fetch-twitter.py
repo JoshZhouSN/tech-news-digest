@@ -54,6 +54,13 @@ TWITTERAPIIO_BASE = "https://api.twitterapi.io"
 GETXAPI_BASE = "https://api.getxapi.com"
 BIRD_DEFAULT_CLI = "bird"
 
+BIRD_DEFAULT_MAX_WORKERS = 1
+BIRD_DEFAULT_REQUEST_INTERVAL_SEC = 2.0
+BIRD_DEFAULT_BATCH_SIZE = 8
+BIRD_DEFAULT_BATCH_COOLDOWN_SEC = 30.0
+BIRD_DEFAULT_429_COOLDOWN_SEC = 90.0
+BIRD_DEFAULT_MAX_CONSECUTIVE_429 = 3
+
 
 def setup_logging(verbose: bool) -> logging.Logger:
     """Setup logging configuration."""
@@ -130,6 +137,28 @@ def check_bird_cli(cli_command: Optional[str] = None) -> Tuple[bool, Optional[st
         return False, message[:160]
 
     return True, None
+
+
+def _get_env_int(name: str, default: int, minimum: int = 1) -> int:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        return max(minimum, int(raw))
+    except ValueError:
+        logging.warning(f"Invalid {name}={raw!r}, using default {default}")
+        return default
+
+
+def _get_env_float(name: str, default: float, minimum: float = 0.0) -> float:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        return max(minimum, float(raw))
+    except ValueError:
+        logging.warning(f"Invalid {name}={raw!r}, using default {default}")
+        return default
 
 
 # ---------------------------------------------------------------------------
@@ -726,6 +755,15 @@ class BirdBackend(TwitterBackend):
 
     def __init__(self, cli_command: Optional[str] = None):
         self.command = get_bird_command(cli_command)
+        self.max_workers = _get_env_int("BIRD_MAX_WORKERS", BIRD_DEFAULT_MAX_WORKERS)
+        self.request_interval_sec = _get_env_float("BIRD_REQUEST_INTERVAL_SEC", BIRD_DEFAULT_REQUEST_INTERVAL_SEC)
+        self.batch_size = _get_env_int("BIRD_BATCH_SIZE", BIRD_DEFAULT_BATCH_SIZE)
+        self.batch_cooldown_sec = _get_env_float("BIRD_BATCH_COOLDOWN_SEC", BIRD_DEFAULT_BATCH_COOLDOWN_SEC)
+        self.cooldown_429_sec = _get_env_float("BIRD_429_COOLDOWN_SEC", BIRD_DEFAULT_429_COOLDOWN_SEC)
+        self.max_consecutive_429 = _get_env_int(
+            "BIRD_MAX_CONSECUTIVE_429",
+            BIRD_DEFAULT_MAX_CONSECUTIVE_429,
+        )
 
     @staticmethod
     def _parse_date(date_str: str) -> Optional[datetime]:
@@ -817,7 +855,7 @@ class BirdBackend(TwitterBackend):
         results: List[Dict[str, Any]] = []
         total = len(sources)
         done = 0
-        with ThreadPoolExecutor(max_workers=1) as pool:
+        with ThreadPoolExecutor(max_workers=self.max_workers) as pool:
             futures = {pool.submit(self._fetch_user_tweets, source, cutoff): source
                        for source in sources}
             for future in as_completed(futures):

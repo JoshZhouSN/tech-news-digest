@@ -103,6 +103,12 @@ export TWITTER_API_BACKEND="auto"  # auto|getxapi|twitterapiio|bird|official
 export BIRD_CLI="bird"             # 或：bunx @steipete/bird
 export AUTH_TOKEN="..."            # 如果 Bird 不直接读浏览器 cookie，可手动提供
 export CT0="..."                   # 如果 Bird 不直接读浏览器 cookie，可手动提供
+export BIRD_MAX_WORKERS="1"        # Bird 默认串行执行
+export BIRD_REQUEST_INTERVAL_SEC="2.0"
+export BIRD_BATCH_SIZE="8"
+export BIRD_BATCH_COOLDOWN_SEC="30"
+export BIRD_429_COOLDOWN_SEC="90"
+export BIRD_MAX_CONSECUTIVE_429="3"
 # 网页搜索
 export TAVILY_API_KEY="tvly-xxx"   # Tavily Search API
 export BRAVE_API_KEYS="k1,k2,k3"   # Brave Search API 密钥（逗号分隔用于轮换）
@@ -145,6 +151,8 @@ export BIRD_CLI="bunx @steipete/bird"
 ```
 
 Bird 只在你显式执行 `fetch-twitter.py --backend bird` 时生效。它依赖 X 网页登录态或 `AUTH_TOKEN`/`CT0`，不是官方 API key，更适合本机操作场景，不适合作为默认无人值守后端。
+
+如果你的目标是提高 Bird 对多账号的覆盖率，优先调节节奏参数，而不是提高并发。现在 Bird 支持请求间隔、分批冷却和 429 冷却参数，可以用更长执行时间换更低的限流概率。
 
 ## 🧪 测试
 

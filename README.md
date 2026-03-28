@@ -106,6 +106,12 @@ export TWITTER_API_BACKEND="auto"  # auto|getxapi|twitterapiio|bird|official
 export BIRD_CLI="bird"             # or: bunx @steipete/bird
 export AUTH_TOKEN="..."            # optional if Bird reads cookies from browser
 export CT0="..."                   # optional if Bird reads cookies from browser
+export BIRD_MAX_WORKERS="1"        # keep Bird serialized by default
+export BIRD_REQUEST_INTERVAL_SEC="2.0"
+export BIRD_BATCH_SIZE="8"
+export BIRD_BATCH_COOLDOWN_SEC="30"
+export BIRD_429_COOLDOWN_SEC="90"
+export BIRD_MAX_CONSECUTIVE_429="3"
 # Web Search
 export TAVILY_API_KEY="tvly-xxx"   # Tavily Search API
 export BRAVE_API_KEYS="k1,k2,k3"   # Brave Search API keys (comma-separated for rotation)
@@ -149,6 +155,8 @@ export BIRD_CLI="bunx @steipete/bird"
 ```
 
 Bird is an explicit opt-in backend for `fetch-twitter.py --backend bird`. It uses your X web session cookies or `AUTH_TOKEN`/`CT0`, not an official API key, so it fits local operator workflows better than headless server defaults.
+
+If you are trying to maximize Bird coverage across many accounts, tune pacing rather than adding concurrency. The Bird backend now supports serialized execution plus request/batch cooldown environment variables so you can trade runtime for lower rate-limit pressure.
 
 ## 📂 Repository
 

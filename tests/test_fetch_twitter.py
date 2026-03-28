@@ -130,6 +130,40 @@ class TestSelectBackend(unittest.TestCase):
 
 
 class TestBirdBackendExecution(unittest.TestCase):
+    def test_uses_default_pacing_config(self):
+        backend_cls = getattr(fetch_twitter, "BirdBackend", None)
+        self.assertIsNotNone(backend_cls, "BirdBackend should exist")
+
+        backend = backend_cls(cli_command="bird")
+
+        self.assertEqual(backend.max_workers, 1)
+        self.assertEqual(backend.request_interval_sec, 2.0)
+        self.assertEqual(backend.batch_size, 8)
+        self.assertEqual(backend.batch_cooldown_sec, 30.0)
+        self.assertEqual(backend.cooldown_429_sec, 90.0)
+        self.assertEqual(backend.max_consecutive_429, 3)
+
+    def test_reads_pacing_config_from_env(self):
+        backend_cls = getattr(fetch_twitter, "BirdBackend", None)
+        self.assertIsNotNone(backend_cls, "BirdBackend should exist")
+
+        with mock.patch.dict(os.environ, {
+            "BIRD_MAX_WORKERS": "2",
+            "BIRD_REQUEST_INTERVAL_SEC": "1.5",
+            "BIRD_BATCH_SIZE": "5",
+            "BIRD_BATCH_COOLDOWN_SEC": "12",
+            "BIRD_429_COOLDOWN_SEC": "33",
+            "BIRD_MAX_CONSECUTIVE_429": "4",
+        }, clear=True):
+            backend = backend_cls(cli_command="bird")
+
+        self.assertEqual(backend.max_workers, 2)
+        self.assertEqual(backend.request_interval_sec, 1.5)
+        self.assertEqual(backend.batch_size, 5)
+        self.assertEqual(backend.batch_cooldown_sec, 12.0)
+        self.assertEqual(backend.cooldown_429_sec, 33.0)
+        self.assertEqual(backend.max_consecutive_429, 4)
+
     def test_fetch_all_uses_single_worker(self):
         backend_cls = getattr(fetch_twitter, "BirdBackend", None)
         self.assertIsNotNone(backend_cls, "BirdBackend should exist")
