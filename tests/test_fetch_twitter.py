@@ -89,6 +89,24 @@ class TestBirdBackendParsing(unittest.TestCase):
         self.assertEqual(articles[0]["tweet_id"], "4")
         self.assertEqual(articles[0]["link"], "https://x.com/steipete/status/4")
 
+    def test_parses_bird_twitter_style_date_format(self):
+        self.assertIsNotNone(self.backend_cls, "BirdBackend should exist")
+        backend = self.backend_cls(cli_command="bird")
+        payload = [
+            {
+                "id": "5",
+                "text": "Bird date format",
+                "createdAt": "Fri Mar 27 19:17:35 +0000 2026",
+                "likeCount": 10,
+                "retweetCount": 2,
+            }
+        ]
+
+        articles = backend._parse_tweets_payload(payload, "sama", ["llm"], self.cutoff)
+
+        self.assertEqual(len(articles), 1)
+        self.assertEqual(articles[0]["tweet_id"], "5")
+
 
 class TestSelectBackend(unittest.TestCase):
     def test_selects_bird_backend_when_requested(self):

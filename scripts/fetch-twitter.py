@@ -77,7 +77,7 @@ def clean_tweet_text(text: str) -> str:
 
 
 def _parse_iso_datetime(date_str: str) -> Optional[datetime]:
-    """Parse ISO datetime strings with optional Z suffix."""
+    """Parse ISO or Twitter-style datetime strings."""
     if not date_str:
         return None
     try:
@@ -85,8 +85,19 @@ def _parse_iso_datetime(date_str: str) -> Optional[datetime]:
             date_str = date_str[:-1] + "+00:00"
         return datetime.fromisoformat(date_str)
     except (ValueError, TypeError):
-        logging.debug(f"Failed to parse date: {date_str}")
-        return None
+        pass
+
+    for fmt in ("%a %b %d %H:%M:%S %z %Y", "%Y-%m-%d %H:%M:%S"):
+        try:
+            dt = datetime.strptime(date_str, fmt)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt
+        except (ValueError, TypeError):
+            continue
+
+    logging.debug(f"Failed to parse date: {date_str}")
+    return None
 
 
 def get_bird_command(cli_command: Optional[str] = None) -> List[str]:
