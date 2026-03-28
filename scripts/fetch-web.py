@@ -36,6 +36,7 @@ RETRY_DELAY = 2.0
 # Brave Search API
 BRAVE_API_BASE = "https://api.search.brave.com/res/v1/web/search"
 TAVILY_API_BASE = "https://api.tavily.com/search"
+XCRAWL_API_BASE = "https://run.xcrawl.com/v1/search"
 BRAVE_RATE_LIMIT_CACHE = "/tmp/tech-news-digest-brave-rate-limit.json"
 
 
@@ -290,6 +291,21 @@ def filter_content(text: str, must_include: List[str], exclude: List[str]) -> bo
     return True
 
 
+def build_topic_result(topic_id: str, query_stats: List[Dict[str, Any]],
+                       articles: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Normalize provider-specific topic results into one output contract."""
+    queries_ok = sum(1 for stat in query_stats if stat.get("status") == "ok")
+    return {
+        "topic_id": topic_id,
+        "status": "ok" if queries_ok > 0 else "error",
+        "queries_executed": len(query_stats),
+        "queries_ok": queries_ok,
+        "query_stats": query_stats,
+        "count": len(articles),
+        "articles": articles,
+    }
+
+
 def search_topic_brave(topic: Dict[str, Any], api_key: str, freshness: Optional[str] = None,
                        max_workers: int = 1, delay: float = 0.5) -> Dict[str, Any]:
     """Search all queries for a topic using Brave API.
@@ -338,21 +354,18 @@ def search_topic_brave(topic: Dict[str, Any], api_key: str, freshness: Optional[
                         all_results.append(result)
             time.sleep(delay)
     
-    return {
-        'topic_id': topic_id,
-        'status': 'ok',
-        'queries_executed': len(queries),
-        'queries_ok': sum(1 for q in query_stats if q['status'] == 'ok'),
-        'query_stats': query_stats,
-        'count': len(all_results),
-        'articles': all_results
-    }
+    return build_topic_result(topic_id, query_stats, all_results)
 
 
 
 def get_tavily_api_key() -> Optional[str]:
     """Get Tavily API key from environment."""
     return os.getenv('TAVILY_API_KEY', '').strip() or None
+
+
+def get_xcrawl_api_key() -> Optional[str]:
+    """Get XCrawl API key from environment."""
+    return os.getenv('XCRAWL_API_KEY', '').strip() or None
 
 
 def search_tavily(query: str, api_key: str, topic: str = "general",
@@ -432,16 +445,85 @@ def search_topic_tavily(topic: Dict[str, Any], api_key: str, days: Optional[int]
                     result["topics"] = [topic_id]
                     all_results.append(result)
 
-    ok_count = sum(1 for s in query_stats if s["status"] == "ok")
-    return {
-        "topic": topic_id,
-        "status": "ok" if ok_count > 0 else "error",
-        "queries": len(queries),
-        "queries_ok": ok_count,
-        "count": len(all_results),
-        "articles": all_results,
-        "query_details": query_stats,
+    return build_topic_result(topic_id, query_stats, all_results)
+
+
+def search_xcrawl(query: str, api_key: str, location: str = "US",
+                  language: str = "en", limit: int = MAX_RESULTS_PER_QUERY) -> Dict[str, Any]:
+    """Perform search using XCrawl Search API."""
+    payload = {
+        "query": query,
+        "location": location,
+        "language": language,
+        "limit": limit,
     }
+
+    try:
+        data = json.dumps(payload).encode("utf-8")
+        req = Request(XCRAWL_API_BASE, data=data, headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+            "User-Agent": "TechDigest/3.0",
+        }, method="POST")
+        with urlopen(req, timeout=TIMEOUT) as resp:
+            result = json.loads(resp.read().decode())
+
+        raw_results = result.get("data", {}).get("data", [])
+        response_date = (
+            result.get("ended_at")
+            or result.get("data", {}).get("endedAt")
+            or datetime.now(timezone.utc).isoformat()
+        )
+        articles = []
+        for item in raw_results:
+            articles.append({
+                "title": item.get("title") or "",
+                "link": item.get("url", ""),
+                "snippet": item.get("description", ""),
+                "date": response_date,
+                "source": "xcrawl",
+            })
+
+        return {
+            "query": query,
+            "status": "ok",
+            "total": len(articles),
+            "results": articles,
+        }
+    except HTTPError as e:
+        logging.warning(f"XCrawl search error for '{query}': HTTP {e.code}")
+        return {"query": query, "status": "error", "total": 0, "results": [], "error": f"HTTP {e.code}"}
+    except Exception as e:
+        logging.warning(f"XCrawl search error for '{query}': {e}")
+        return {"query": query, "status": "error", "total": 0, "results": [], "error": str(e)}
+
+
+def search_topic_xcrawl(topic: Dict[str, Any], api_key: str, location: str = "US",
+                        language: str = "en") -> Dict[str, Any]:
+    """Search all queries for a topic using XCrawl API."""
+    topic_id = topic["id"]
+    queries = topic["search"]["queries"]
+    must_include = topic["search"].get("must_include", [])
+    exclude = topic["search"].get("exclude", [])
+
+    all_results = []
+    query_stats = []
+
+    for query in queries:
+        search_result = search_xcrawl(query, api_key, location=location, language=language)
+        query_stats.append({
+            "query": search_result["query"],
+            "status": search_result["status"],
+            "count": search_result["total"],
+        })
+        if search_result["status"] == "ok":
+            for result in search_result["results"]:
+                combined_text = f"{result['title']} {result['snippet']}"
+                if filter_content(combined_text, must_include, exclude):
+                    result["topics"] = [topic_id]
+                    all_results.append(result)
+
+    return build_topic_result(topic_id, query_stats, all_results)
 
 
 def generate_search_interface(topic: Dict[str, Any]) -> Dict[str, Any]:
@@ -499,17 +581,40 @@ def convert_freshness(hours: int) -> str:
         return "py"  # past year
 
 
+def select_web_backend(web_backend: str, tavily_key: Optional[str],
+                       brave_keys: List[str], xcrawl_key: Optional[str]) -> str:
+    """Select the active web backend using explicit choice or auto priority."""
+    if web_backend == "tavily":
+        return "tavily" if tavily_key else "interface"
+    if web_backend == "brave":
+        return "brave" if brave_keys else "interface"
+    if web_backend == "xcrawl":
+        return "xcrawl" if xcrawl_key else "interface"
+    if web_backend == "auto":
+        if tavily_key:
+            return "tavily"
+        if brave_keys:
+            return "brave"
+        if xcrawl_key:
+            return "xcrawl"
+    return "interface"
+
+
 def main():
     """Main web search function."""
     parser = argparse.ArgumentParser(
         description="Perform web searches for tech digest topics. "
-                   "Can use Brave Search API (BRAVE_API_KEY) or generate interface for agents.",
+                   "Can use Tavily, Brave, or XCrawl APIs, or generate interface for agents.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
     # With Brave API
     export BRAVE_API_KEY="your_key_here"
     python3 fetch-web.py --defaults config/defaults --config workspace/config --freshness 24h
+
+    # With XCrawl API
+    export XCRAWL_API_KEY="your_key_here"
+    python3 fetch-web.py --defaults config/defaults --freshness pd
     
     # Without API (generates interface)
     python3 fetch-web.py --config workspace/config --output web-search-interface.json  # backward compatibility
@@ -590,26 +695,22 @@ Examples:
         web_backend = os.getenv('WEB_SEARCH_BACKEND', 'auto').lower()
         tavily_key = get_tavily_api_key()
         brave_keys = get_brave_api_keys()
-        
-        use_tavily = False
-        use_brave = False
+        xcrawl_key = get_xcrawl_api_key()
+
         api_key = None
         max_qps = 1
         max_workers = 1
-        
-        if web_backend == 'tavily' and tavily_key:
-            use_tavily = True
-        elif web_backend == 'brave' and brave_keys:
+        selected_backend = select_web_backend(web_backend, tavily_key, brave_keys, xcrawl_key)
+
+        if web_backend in ('tavily', 'brave', 'xcrawl') and selected_backend == 'interface':
+            logger.warning(f"WEB_SEARCH_BACKEND={web_backend} requested but required credentials are missing; falling back to interface output")
+
+        if selected_backend == 'brave':
             api_key, max_qps, max_workers = select_brave_key_and_limits(brave_keys)
-            use_brave = bool(api_key)
-        elif web_backend == 'auto':
-            if tavily_key:
-                use_tavily = True
-            elif brave_keys:
-                api_key, max_qps, max_workers = select_brave_key_and_limits(brave_keys)
-                use_brave = bool(api_key)
-        
-        if use_tavily:
+            if not api_key:
+                selected_backend = 'interface'
+
+        if selected_backend == 'tavily':
             logger.info(f"Using Tavily Search API for {len(topics)} topics")
             
             # Convert freshness to days for Tavily
@@ -643,7 +744,7 @@ Examples:
                 "config_dir": str(args.config) if args.config else None,
                 "freshness": args.freshness,
                 "api_used": "tavily",
-                "topics_total": len(topics),
+                "topics_total": len(results),
                 "topics_ok": ok_topics,
                 "total_articles": total_articles,
                 "topics": results,
@@ -655,7 +756,7 @@ Examples:
             logger.info(f"\u2705 Done: {ok_topics}/{len(topics)} topics ok, {total_articles} articles → {args.output}")
             return 0
         
-        elif use_brave:
+        elif selected_backend == 'brave':
             # Set fallback keys for rotation on search errors
             global _brave_fallback_keys
             _brave_fallback_keys = brave_keys
@@ -708,9 +809,40 @@ Examples:
             
             logger.info(f"✅ Searched {ok_topics}/{len(results)} topics, "
                        f"{total_articles} articles found")
-            
+
+        elif selected_backend == 'xcrawl':
+            logger.info(f"Using XCrawl Search API for {len(topics)} topics")
+
+            results = []
+            for topic in topics:
+                if not topic.get("search", {}).get("queries"):
+                    logger.debug(f"Topic {topic['id']} has no search queries, skipping")
+                    continue
+                logger.debug(f"Searching topic: {topic['id']}")
+                result = search_topic_xcrawl(topic, xcrawl_key)
+                results.append(result)
+
+            total_articles = sum(r.get("count", 0) for r in results)
+            ok_topics = sum(1 for r in results if r["status"] == "ok")
+
+            output = {
+                "generated": datetime.now(timezone.utc).isoformat(),
+                "source_type": "web",
+                "defaults_dir": str(args.defaults),
+                "config_dir": str(args.config) if args.config else None,
+                "freshness": args.freshness,
+                "api_used": "xcrawl",
+                "topics_total": len(results),
+                "topics_ok": ok_topics,
+                "total_articles": total_articles,
+                "topics": results,
+            }
+
+            logger.info(f"✅ Searched {ok_topics}/{len(results)} topics via XCrawl, "
+                        f"{total_articles} articles found")
+
         else:
-            logger.info("No BRAVE_API_KEY found, generating search interface for agents")
+            logger.info("No usable web search backend found, generating search interface for agents")
             
             results = []
             for topic in topics:
