@@ -817,7 +817,7 @@ class BirdBackend(TwitterBackend):
         results: List[Dict[str, Any]] = []
         total = len(sources)
         done = 0
-        with ThreadPoolExecutor(max_workers=3) as pool:
+        with ThreadPoolExecutor(max_workers=1) as pool:
             futures = {pool.submit(self._fetch_user_tweets, source, cutoff): source
                        for source in sources}
             for future in as_completed(futures):

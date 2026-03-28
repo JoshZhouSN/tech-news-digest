@@ -129,5 +129,64 @@ class TestSelectBackend(unittest.TestCase):
         self.assertIsNone(backend)
 
 
+class TestBirdBackendExecution(unittest.TestCase):
+    def test_fetch_all_uses_single_worker(self):
+        backend_cls = getattr(fetch_twitter, "BirdBackend", None)
+        self.assertIsNotNone(backend_cls, "BirdBackend should exist")
+        backend = backend_cls(cli_command="bird")
+        sources = [
+            {
+                "id": "sama-twitter",
+                "name": "Sam Altman",
+                "handle": "sama",
+                "priority": True,
+                "topics": ["llm"],
+            }
+        ]
+        cutoff = fetch_twitter.datetime(2026, 3, 27, tzinfo=fetch_twitter.timezone.utc)
+        captured = {}
+
+        class FakeFuture:
+            def __init__(self, value):
+                self._value = value
+
+            def result(self):
+                return self._value
+
+        class FakeExecutor:
+            def __init__(self, max_workers):
+                captured["max_workers"] = max_workers
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def submit(self, fn, *args, **kwargs):
+                return FakeFuture(fn(*args, **kwargs))
+
+        result_item = {
+            "source_id": "sama-twitter",
+            "source_type": "twitter",
+            "name": "Sam Altman",
+            "handle": "sama",
+            "priority": True,
+            "topics": ["llm"],
+            "status": "ok",
+            "attempts": 1,
+            "count": 1,
+            "articles": [{"metrics": {"like_count": 1}}],
+        }
+
+        with mock.patch.object(fetch_twitter, "ThreadPoolExecutor", FakeExecutor):
+            with mock.patch.object(fetch_twitter, "as_completed", side_effect=lambda futures: list(futures)):
+                with mock.patch.object(backend, "_fetch_user_tweets", return_value=result_item):
+                    results = backend.fetch_all(sources, cutoff)
+
+        self.assertEqual(captured["max_workers"], 1)
+        self.assertEqual(len(results), 1)
+
+
 if __name__ == "__main__":
     unittest.main()
