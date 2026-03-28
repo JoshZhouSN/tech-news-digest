@@ -26,6 +26,8 @@ import time
 import tempfile
 import re
 import threading
+import subprocess
+import shlex
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -33,7 +35,7 @@ from urllib.request import urlopen, Request
 from urllib.error import HTTPError
 from urllib.parse import urlencode, quote
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Tuple
 
 TIMEOUT = 30
 MAX_WORKERS = 5  # Lower for API rate limits
@@ -50,6 +52,7 @@ USER_LOOKUP_ENDPOINT = f"{OFFICIAL_API_BASE}/users/by"
 # twitterapi.io endpoints
 TWITTERAPIIO_BASE = "https://api.twitterapi.io"
 GETXAPI_BASE = "https://api.getxapi.com"
+BIRD_DEFAULT_CLI = "bird"
 
 
 def setup_logging(verbose: bool) -> logging.Logger:
@@ -71,6 +74,51 @@ def clean_tweet_text(text: str) -> str:
     if len(text) > 280:
         text = text[:277] + "..."
     return text
+
+
+def _parse_iso_datetime(date_str: str) -> Optional[datetime]:
+    """Parse ISO datetime strings with optional Z suffix."""
+    if not date_str:
+        return None
+    try:
+        if date_str.endswith("Z"):
+            date_str = date_str[:-1] + "+00:00"
+        return datetime.fromisoformat(date_str)
+    except (ValueError, TypeError):
+        logging.debug(f"Failed to parse date: {date_str}")
+        return None
+
+
+def get_bird_command(cli_command: Optional[str] = None) -> List[str]:
+    """Return Bird CLI command parts from arg/env/default."""
+    raw = cli_command or os.getenv("BIRD_CLI", BIRD_DEFAULT_CLI)
+    return shlex.split(raw)
+
+
+def check_bird_cli(cli_command: Optional[str] = None) -> Tuple[bool, Optional[str]]:
+    """Verify Bird CLI exists and can access a logged-in X session."""
+    cmd = get_bird_command(cli_command)
+    try:
+        result = subprocess.run(
+            cmd + ["whoami", "--plain"],
+            capture_output=True,
+            text=True,
+            timeout=TIMEOUT,
+            env=os.environ,
+        )
+    except FileNotFoundError:
+        return False, f"Bird CLI not found: {' '.join(cmd)}"
+    except subprocess.TimeoutExpired:
+        return False, "Bird CLI availability check timed out"
+    except Exception as e:
+        return False, f"Bird CLI check failed: {e}"
+
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "").strip().splitlines()
+        message = detail[-1] if detail else "Bird CLI unavailable"
+        return False, message[:160]
+
+    return True, None
 
 
 # ---------------------------------------------------------------------------
@@ -662,6 +710,118 @@ class GetXApiBackend(TwitterBackend):
         return results
 
 
+class BirdBackend(TwitterBackend):
+    """Bird CLI backend using local X session cookies."""
+
+    def __init__(self, cli_command: Optional[str] = None):
+        self.command = get_bird_command(cli_command)
+
+    @staticmethod
+    def _parse_date(date_str: str) -> Optional[datetime]:
+        return _parse_iso_datetime(date_str)
+
+    def _parse_tweets_payload(self, payload: Any, handle: str, topics: list, cutoff: datetime) -> list:
+        tweets = payload.get("tweets", []) if isinstance(payload, dict) else payload
+        if not isinstance(tweets, list):
+            return []
+
+        articles = []
+        for tweet in tweets:
+            if not isinstance(tweet, dict):
+                continue
+            tweet_id = tweet.get("id") or tweet.get("rest_id")
+            text = tweet.get("text") or tweet.get("fullText") or tweet.get("full_text")
+            created_at_raw = tweet.get("createdAt") or tweet.get("created_at")
+            if not tweet_id or not text or not created_at_raw:
+                continue
+            if tweet.get("isReply") or tweet.get("inReplyToStatusId") or tweet.get("in_reply_to_status_id_str"):
+                continue
+            if text.startswith("RT @") or tweet.get("retweetedTweet") or tweet.get("retweeted_tweet"):
+                continue
+
+            created_at = self._parse_date(created_at_raw)
+            if not created_at or created_at < cutoff:
+                continue
+
+            link = tweet.get("url") or f"https://x.com/{handle}/status/{tweet_id}"
+            articles.append({
+                "title": clean_tweet_text(text),
+                "link": link,
+                "date": created_at.isoformat(),
+                "topics": topics[:],
+                "metrics": {
+                    "like_count": tweet.get("favoriteCount", tweet.get("likeCount", 0)),
+                    "retweet_count": tweet.get("retweetCount", 0),
+                    "reply_count": tweet.get("replyCount", 0),
+                    "quote_count": tweet.get("quoteCount", 0),
+                    "impression_count": tweet.get("viewCount", tweet.get("impressionCount", 0)),
+                },
+                "tweet_id": tweet_id,
+            })
+        return articles
+
+    def _fetch_user_tweets(self, source: Dict[str, Any], cutoff: datetime) -> Dict[str, Any]:
+        handle = source["handle"].lstrip('@')
+        topics = source["topics"]
+
+        for attempt in range(RETRY_COUNT + 1):
+            try:
+                cmd = self.command + [
+                    "user-tweets",
+                    f"@{handle}",
+                    "-n",
+                    str(max(MAX_TWEETS_PER_USER, 40)),
+                    "--json",
+                    "--plain",
+                ]
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=TIMEOUT,
+                    env=os.environ,
+                )
+                if result.returncode != 0:
+                    detail = (result.stderr or result.stdout or "").strip().splitlines()
+                    error_msg = detail[-1] if detail else f"Bird exited with {result.returncode}"
+                    raise ValueError(error_msg[:160])
+
+                payload = json.loads(result.stdout)
+                articles = self._parse_tweets_payload(payload, handle, topics, cutoff)
+                return self._make_result(source, articles, attempt)
+
+            except subprocess.TimeoutExpired:
+                error_msg = "Bird CLI timed out"
+            except Exception as e:
+                error_msg = str(e)[:100]
+                logging.debug(f"Attempt {attempt + 1} failed for @{handle}: {error_msg}")
+
+            if attempt < RETRY_COUNT:
+                time.sleep(RETRY_DELAY * (2 ** attempt))
+                continue
+
+            return self._make_error(source, error_msg, attempt)
+
+    def fetch_all(self, sources: List[Dict[str, Any]], cutoff: datetime) -> List[Dict[str, Any]]:
+        results: List[Dict[str, Any]] = []
+        total = len(sources)
+        done = 0
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            futures = {pool.submit(self._fetch_user_tweets, source, cutoff): source
+                       for source in sources}
+            for future in as_completed(futures):
+                result = future.result()
+                results.append(result)
+                done += 1
+                if result["status"] == "ok":
+                    logging.info(f"[{done}/{total}] ✅ @{result['handle']}: {result['count']} tweets"
+                                 + (f" (top: {result['articles'][0]['metrics']['like_count']}❤️)" if result['articles'] else ""))
+                else:
+                    logging.warning(f"[{done}/{total}] ❌ @{result['handle']}: {result['error']}")
+
+        return results
+
+
 # ---------------------------------------------------------------------------
 # Backend selection
 # ---------------------------------------------------------------------------
@@ -694,6 +854,14 @@ def select_backend(backend_name: str, no_cache: bool = False) -> Optional[Twitte
             return None
         logging.info("Using official X API v2 backend")
         return OfficialBackend(token, no_cache=no_cache)
+
+    if backend_name == "bird":
+        ok, error_msg = check_bird_cli()
+        if not ok:
+            logging.error(f"Bird backend unavailable: {error_msg}")
+            return None
+        logging.info("Using Bird CLI backend")
+        return BirdBackend()
 
     # auto: try getxapi first, then twitterapiio, then official
     if backend_name == "auto":
@@ -754,7 +922,7 @@ def main():
     """Main Twitter fetching function."""
     parser = argparse.ArgumentParser(
         description="Fetch recent tweets from Twitter/X KOL accounts. "
-                   "Supports official X API v2, GetXAPI, and twitterapi.io backends.",
+                   "Supports official X API v2, GetXAPI, twitterapi.io, and Bird CLI backends.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -762,6 +930,7 @@ Examples:
     python3 fetch-twitter.py
     python3 fetch-twitter.py --defaults config/defaults --config workspace/config --hours 24 -o results.json
     python3 fetch-twitter.py --backend twitterapiio  # use twitterapi.io
+    python3 fetch-twitter.py --backend bird  # use Bird CLI with local X session
     python3 fetch-twitter.py --config workspace/config --verbose  # backward compatibility
         """
     )
@@ -812,7 +981,7 @@ Examples:
 
     parser.add_argument(
         "--backend",
-        choices=["official", "twitterapiio", "getxapi", "auto"],
+        choices=["official", "twitterapiio", "getxapi", "bird", "auto"],
         default=None,
         help="Twitter API backend (overrides TWITTER_API_BACKEND env var). "
              "auto = getxapi if GETX_API_KEY set, else twitterapiio if TWITTERAPI_IO_KEY set, else official if X_BEARER_TOKEN set"

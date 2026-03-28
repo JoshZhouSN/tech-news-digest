@@ -9,6 +9,7 @@
 #   ./test-pipeline.sh --hours 12               # custom time window
 #   ./test-pipeline.sh --keep                   # keep output dir after test
 #   ./test-pipeline.sh --twitter-backend twitterapiio  # force twitter backend
+#   ./test-pipeline.sh --twitter-backend bird          # use Bird CLI with local X login
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -68,10 +69,12 @@ OPTIONS:
 
   --twitter-backend NAME
                     Force a specific Twitter API backend
-                    Values: official, twitterapiio, auto
+                    Values: official, twitterapiio, getxapi, bird, auto
                     official     = X API v2 (needs X_BEARER_TOKEN)
+                    getxapi      = GetXAPI (needs GETX_API_KEY)
                     twitterapiio = twitterapi.io (needs TWITTERAPI_IO_KEY)
-                    auto         = try twitterapiio first, fallback to official
+                    bird         = Bird CLI with local X session (needs Bird auth via cookies or AUTH_TOKEN/CT0)
+                    auto         = try getxapi first, then twitterapiio, then official
 
   --config DIR      User config overlay directory (optional)
                     Example: --config workspace/config
@@ -85,14 +88,19 @@ OPTIONS:
 EXAMPLES:
   ./test-pipeline.sh                                    # full pipeline, all sources
   ./test-pipeline.sh --only twitter --twitter-backend twitterapiio  # twitter only via twitterapi.io
+  ./test-pipeline.sh --only twitter --twitter-backend bird --ids steipete-twitter
   ./test-pipeline.sh --topics crypto --hours 48 --keep  # crypto sources, 48h window
   ./test-pipeline.sh --skip web,reddit -v               # skip web+reddit, verbose
   ./test-pipeline.sh --ids sama-twitter,karpathy-twitter --only twitter
 
 ENVIRONMENT:
   X_BEARER_TOKEN      Official X API v2 bearer token (for --backend official)
+  GETX_API_KEY        GetXAPI key (for --backend getxapi)
   TWITTERAPI_IO_KEY   twitterapi.io API key (for --backend twitterapiio)
-  TWITTER_API_BACKEND Default twitter backend if --backend not given (official|twitterapiio|auto)
+  AUTH_TOKEN          X web auth token for Bird CLI (optional if Bird reads browser cookies)
+  CT0                 X web ct0 token for Bird CLI (optional if Bird reads browser cookies)
+  BIRD_CLI            Bird CLI command override, e.g. 'bunx @steipete/bird'
+  TWITTER_API_BACKEND Default twitter backend if --backend not given (official|getxapi|twitterapiio|bird|auto)
   BRAVE_API_KEY       Brave Search API key (for web fetch)
   GITHUB_TOKEN        GitHub token (optional, increases GitHub API rate limits)
 HELP
@@ -223,11 +231,19 @@ if should_run "twitter"; then
     TWITTER_ARGS=("--defaults" "$DEFAULTS" "--hours" "$HOURS" "--output" "$OUTDIR/twitter.json" "--force" "${EXTRA_ARGS[@]}")
     [ -n "$TWITTER_BACKEND" ] && TWITTER_ARGS+=("--backend" "$TWITTER_BACKEND")
 
-    if [ -n "$X_BEARER_TOKEN" ] || [ -n "$TWITTERAPI_IO_KEY" ]; then
+    if [ "$TWITTER_BACKEND" = "bird" ]; then
+        if command -v "${BIRD_CLI:-bird}" >/dev/null 2>&1 || [ "${BIRD_CLI:-bird}" != "bird" ]; then
+            run_step "fetch-twitter" python3 "$SCRIPT_DIR/fetch-twitter.py" "${TWITTER_ARGS[@]}"
+            validate_json "$OUTDIR/twitter.json" "twitter"
+        else
+            echo "⏭  fetch-twitter (Bird CLI not found: ${BIRD_CLI:-bird})"
+            SKIPPED=$((SKIPPED + 1))
+        fi
+    elif [ -n "$GETX_API_KEY" ] || [ -n "$X_BEARER_TOKEN" ] || [ -n "$TWITTERAPI_IO_KEY" ]; then
         run_step "fetch-twitter" python3 "$SCRIPT_DIR/fetch-twitter.py" "${TWITTER_ARGS[@]}"
         validate_json "$OUTDIR/twitter.json" "twitter"
     else
-        echo "⏭  fetch-twitter (no X_BEARER_TOKEN or TWITTERAPI_IO_KEY)"
+        echo "⏭  fetch-twitter (no GETX_API_KEY, X_BEARER_TOKEN, or TWITTERAPI_IO_KEY)"
         SKIPPED=$((SKIPPED + 1))
     fi
 else
