@@ -21,6 +21,14 @@ python3 -m pip install -r requirements.txt
 
 - 没有密钥时，项目不一定完全失败
 - 但对应来源会被跳过，最终日报覆盖率会下降
+- Bird 不是 API key 模式，它依赖本机 X 网页登录态或 `AUTH_TOKEN` / `CT0`
+
+### X / Bird 额外说明
+
+- `TWITTER_API_BACKEND=auto` 不会自动选 Bird，`auto` 仍然只会在 `getxapi -> twitterapiio -> official` 之间挑
+- 只有显式传 `--backend bird` 或设置 `TWITTER_API_BACKEND=bird` 时，才会走 Bird
+- Bird 适合“有人在本机登录过 X、希望直接读取动态”的场景，不适合作为默认服务器后端
+- Bird CLI 默认命令是 `bird`，也可以通过 `BIRD_CLI="bunx @steipete/bird"` 覆盖
 
 ## 2. 用户覆盖配置
 
@@ -66,6 +74,12 @@ python3 scripts/validate-config.py --defaults config/defaults --verbose
 bash scripts/test-pipeline.sh --only rss,github --hours 24
 ```
 
+### 只测 Bird 的 X 抓取
+
+```bash
+bash scripts/test-pipeline.sh --only twitter --twitter-backend bird --ids steipete-twitter --hours 24
+```
+
 ## 4. 排障入口
 
 ### 问题：某类内容突然明显变少
@@ -76,6 +90,7 @@ bash scripts/test-pipeline.sh --only rss,github --hours 24
 - 外部平台是否限流
 - `scripts/test-pipeline.sh` 单独跑该来源是否失败
 - 是否是 `config/defaults/sources.json` 中被误关掉
+- 如果使用 Bird，再检查本机 X 登录态是否还有效，或 `AUTH_TOKEN` / `CT0` 是否过期
 
 ### 问题：脚本成功但日报质量变差
 

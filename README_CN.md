@@ -98,7 +98,11 @@ cp config/defaults/topics.json workspace/config/tech-news-digest-topics.json
 export GETX_API_KEY="..."        # GetXAPI
 export TWITTERAPI_IO_KEY="..."   # twitterapi.io
 export X_BEARER_TOKEN="..."      # Twitter/X 官方 API v2
-export TWITTER_API_BACKEND="auto"  # auto|getxapi|twitterapiio|official
+export TWITTER_API_BACKEND="auto"  # auto|getxapi|twitterapiio|bird|official
+# Bird CLI（显式可选，不会被 auto 默认选中）
+export BIRD_CLI="bird"             # 或：bunx @steipete/bird
+export AUTH_TOKEN="..."            # 如果 Bird 不直接读浏览器 cookie，可手动提供
+export CT0="..."                   # 如果 Bird 不直接读浏览器 cookie，可手动提供
 # 网页搜索
 export TAVILY_API_KEY="tvly-xxx"   # Tavily Search API
 export BRAVE_API_KEYS="k1,k2,k3"   # Brave Search API 密钥（逗号分隔用于轮换）
@@ -131,6 +135,16 @@ pip install weasyprint
 ```
 
 - **weasyprint** — 启用 PDF 报告生成
+
+如果你要在本机用网页登录态读取 X 消息，还可以额外安装 Bird：
+
+```bash
+npm install -g @steipete/bird
+# 或保持仓库本身不引入 Node 依赖，按需临时运行：
+export BIRD_CLI="bunx @steipete/bird"
+```
+
+Bird 只在你显式执行 `fetch-twitter.py --backend bird` 时生效。它依赖 X 网页登录态或 `AUTH_TOKEN`/`CT0`，不是官方 API key，更适合本机操作场景，不适合作为默认无人值守后端。
 
 ## 🧪 测试
 

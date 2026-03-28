@@ -101,7 +101,11 @@ All environment variables are optional. The pipeline runs with whatever sources 
 export GETX_API_KEY="..."        # GetXAPI
 export TWITTERAPI_IO_KEY="..."   # twitterapi.io
 export X_BEARER_TOKEN="..."      # Official X API v2
-export TWITTER_API_BACKEND="auto"  # auto|getxapi|twitterapiio|official
+export TWITTER_API_BACKEND="auto"  # auto|getxapi|twitterapiio|bird|official
+# Bird CLI (explicit opt-in backend, not used by auto)
+export BIRD_CLI="bird"             # or: bunx @steipete/bird
+export AUTH_TOKEN="..."            # optional if Bird reads cookies from browser
+export CT0="..."                   # optional if Bird reads cookies from browser
 # Web Search
 export TAVILY_API_KEY="tvly-xxx"   # Tavily Search API
 export BRAVE_API_KEYS="k1,k2,k3"   # Brave Search API keys (comma-separated for rotation)
@@ -135,6 +139,16 @@ pip install weasyprint
 ```
 
 - **weasyprint** — Enables PDF report generation
+
+Optional Bird runtime for reading X via local web session:
+
+```bash
+npm install -g @steipete/bird
+# or keep the repo dependency-free and run it ad hoc:
+export BIRD_CLI="bunx @steipete/bird"
+```
+
+Bird is an explicit opt-in backend for `fetch-twitter.py --backend bird`. It uses your X web session cookies or `AUTH_TOKEN`/`CT0`, not an official API key, so it fits local operator workflows better than headless server defaults.
 
 ## 📂 Repository
 
