@@ -29,6 +29,13 @@ python3 -m pip install -r requirements.txt
 - 只有显式传 `--backend bird` 或设置 `TWITTER_API_BACKEND=bird` 时，才会走 Bird
 - Bird 适合“有人在本机登录过 X、希望直接读取动态”的场景，不适合作为默认服务器后端
 - Bird CLI 默认命令是 `bird`，也可以通过 `BIRD_CLI="bunx @steipete/bird"` 覆盖
+- Bird 节奏控制参数：
+  - `BIRD_MAX_WORKERS`：Bird 抓取并发数，默认 `1`
+  - `BIRD_REQUEST_INTERVAL_SEC`：账号之间的等待秒数，默认 `2`
+  - `BIRD_BATCH_SIZE`：每批账号数，默认 `8`
+  - `BIRD_BATCH_COOLDOWN_SEC`：每批结束后的额外冷却秒数，默认 `30`
+  - `BIRD_429_COOLDOWN_SEC`：遇到单个 `429` 后的冷却秒数，默认 `90`
+  - `BIRD_MAX_CONSECUTIVE_429`：连续 `429` 达到多少次后触发 Bird 限流保护，默认 `3`
 
 ## 2. 用户覆盖配置
 
