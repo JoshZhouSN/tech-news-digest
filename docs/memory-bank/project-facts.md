@@ -59,11 +59,16 @@ python3 scripts/validate-config.py --defaults config/defaults --verbose
 ## 5. 已知外部依赖
 
 - Twitter/X：依赖 `TWITTERAPI_IO_KEY` 或 `X_BEARER_TOKEN`
-- Web Search：依赖 `BRAVE_API_KEY`、`BRAVE_API_KEYS` 或 `TAVILY_API_KEY`
+- Web Search：依赖 `TAVILY_API_KEY`、`BRAVE_API_KEY` / `BRAVE_API_KEYS` 或 `XCRAWL_API_KEY`
 - GitHub：`GITHUB_TOKEN` 可提升限流表现
 - PDF：`weasyprint`
 
 这些依赖不是“项目能不能启动”的门槛，但会直接影响可抓取的数据覆盖率。换句话说，缺少密钥时项目不会完全失效，但日报质量会下降。
+
+当前网页搜索后端真实优先级：
+
+- `auto` 模式：`tavily -> brave -> xcrawl -> interface`
+- 显式指定某个后端但缺少对应凭证时：不会偷偷切到别家，而是直接退回 interface 输出
 
 ## 6. 现阶段最重要的开发约束
 

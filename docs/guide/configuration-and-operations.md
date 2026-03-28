@@ -22,6 +22,11 @@ python3 -m pip install -r requirements.txt
 - 没有密钥时，项目不一定完全失败
 - 但对应来源会被跳过，最终日报覆盖率会下降
 
+网页搜索的当前真实优先级是：
+
+- `WEB_SEARCH_BACKEND=auto` 时：`tavily -> brave -> xcrawl -> interface`
+- 如果显式指定 `tavily`、`brave` 或 `xcrawl`，但缺少对应密钥，脚本不会自动改用别家，而是直接输出 interface JSON 兜底
+
 ## 2. 用户覆盖配置
 
 建议目录：
@@ -66,6 +71,18 @@ python3 scripts/validate-config.py --defaults config/defaults --verbose
 bash scripts/test-pipeline.sh --only rss,github --hours 24
 ```
 
+如果你想单独验证网页搜索层，建议直接跑：
+
+```bash
+python3 scripts/fetch-web.py --defaults config/defaults --freshness pd --output /tmp/td-web.json --verbose
+```
+
+重点看三件事：
+
+- `api_used` 是否符合预期
+- `topics_ok` 是否大于 `0`
+- `topics[].articles[]` 是否已经有统一字段结构
+
 ## 4. 排障入口
 
 ### 问题：某类内容突然明显变少
@@ -76,6 +93,11 @@ bash scripts/test-pipeline.sh --only rss,github --hours 24
 - 外部平台是否限流
 - `scripts/test-pipeline.sh` 单独跑该来源是否失败
 - 是否是 `config/defaults/sources.json` 中被误关掉
+
+如果是网页搜索层，还要额外检查：
+
+- `WEB_SEARCH_BACKEND` 是否被显式固定到了一个当前没有密钥的后端
+- 是否误以为系统会从 `xcrawl` 回退到 `tavily` 或 `brave`，而实际上当前显式模式不会跨后端切换
 
 ### 问题：脚本成功但日报质量变差
 

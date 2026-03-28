@@ -93,7 +93,10 @@ ENVIRONMENT:
   X_BEARER_TOKEN      Official X API v2 bearer token (for --backend official)
   TWITTERAPI_IO_KEY   twitterapi.io API key (for --backend twitterapiio)
   TWITTER_API_BACKEND Default twitter backend if --backend not given (official|twitterapiio|auto)
+  TAVILY_API_KEY      Tavily Search API key (for web fetch)
   BRAVE_API_KEY       Brave Search API key (for web fetch)
+  BRAVE_API_KEYS      Multiple Brave Search API keys (for web fetch)
+  XCRAWL_API_KEY      XCrawl Search API key (for web fetch)
   GITHUB_TOKEN        GitHub token (optional, increases GitHub API rate limits)
 HELP
             exit 0
@@ -251,11 +254,11 @@ fi
 
 # Web search
 if should_run "web"; then
-    if [ -n "$BRAVE_API_KEY" ]; then
+    if [ -n "$TAVILY_API_KEY" ] || [ -n "$BRAVE_API_KEY" ] || [ -n "$BRAVE_API_KEYS" ] || [ -n "$XCRAWL_API_KEY" ]; then
         run_step "fetch-web" python3 "$SCRIPT_DIR/fetch-web.py" --defaults "$DEFAULTS" --freshness pd --output "$OUTDIR/web.json" --force "${EXTRA_ARGS[@]}"
         validate_json "$OUTDIR/web.json" "web"
     else
-        echo "⏭  fetch-web (no BRAVE_API_KEY)"
+        echo "⏭  fetch-web (no web search API credentials)"
         SKIPPED=$((SKIPPED + 1))
     fi
 else

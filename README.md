@@ -106,12 +106,16 @@ export TWITTER_API_BACKEND="auto"  # auto|getxapi|twitterapiio|official
 export TAVILY_API_KEY="tvly-xxx"   # Tavily Search API
 export BRAVE_API_KEYS="k1,k2,k3"   # Brave Search API keys (comma-separated for rotation)
 export BRAVE_API_KEY="..."         # Single Brave key
-export WEB_SEARCH_BACKEND="auto"   # auto|brave|tavily
+export XCRAWL_API_KEY="..."        # XCrawl Search API
+export WEB_SEARCH_BACKEND="auto"   # auto|tavily|brave|xcrawl
 # GitHub
 export GITHUB_TOKEN="..."          # GitHub API
 # Other
 export BRAVE_PLAN="free"           # Override Brave rate limit: free|pro
 ```
+
+Web search backend priority is `tavily -> brave -> xcrawl -> interface`.
+If none of the three providers are available, the pipeline still emits interface JSON as a fallback so downstream steps can continue.
 
 ## 📦 Dependencies
 

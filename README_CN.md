@@ -103,11 +103,15 @@ export TWITTER_API_BACKEND="auto"  # auto|getxapi|twitterapiio|official
 export TAVILY_API_KEY="tvly-xxx"   # Tavily Search API
 export BRAVE_API_KEYS="k1,k2,k3"   # Brave Search API 密钥（逗号分隔用于轮换）
 export BRAVE_API_KEY="..."         # 单个密钥
-export WEB_SEARCH_BACKEND="auto"   # auto|brave|tavily
+export XCRAWL_API_KEY="..."        # XCrawl Search API
+export WEB_SEARCH_BACKEND="auto"   # auto|tavily|brave|xcrawl
 # GitHub
 export GITHUB_TOKEN="..."          # GitHub API
 # 其他
 export BRAVE_PLAN="free"           # 覆盖速率限制检测：free|pro
+
+网页搜索后端优先级现在是 `tavily -> brave -> xcrawl -> interface`。
+如果三家都不可用，流水线仍会输出 interface JSON 作为兜底，这样后续步骤不会直接中断。
 
 ## 📦 依赖
 
