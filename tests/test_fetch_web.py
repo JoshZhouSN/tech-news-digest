@@ -165,6 +165,170 @@ class TestFetchWebProviders(unittest.TestCase):
         self.assertEqual(data["total_articles"], 1)
         self.assertEqual(data["topics"][0]["topic_id"], "llm")
 
+    def test_main_auto_falls_back_to_xcrawl_when_brave_is_unavailable(self):
+        topic = {
+            "id": "llm",
+            "search": {"queries": ["llm latest news"], "must_include": [], "exclude": []},
+        }
+        payload = {
+            "search_id": "job-1b",
+            "endpoint": "search",
+            "version": "v1",
+            "status": "completed",
+            "query": "llm latest news",
+            "data": {
+                "status": "success",
+                "data": [
+                    {
+                        "title": "LLM fallback release",
+                        "url": "https://example.com/llm-fallback",
+                        "description": "Large model fallback update",
+                    }
+                ],
+                "startedAt": "2026-03-28T00:00:00Z",
+                "endedAt": "2026-03-28T00:00:01Z",
+                "credits_used": 2,
+            },
+            "started_at": "2026-03-28T00:00:00Z",
+            "ended_at": "2026-03-28T00:00:01Z",
+            "total_credits_used": 2,
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "web.json"
+            argv = ["fetch-web.py", "--output", str(output_path)]
+            env = {
+                "WEB_SEARCH_BACKEND": "auto",
+                "BRAVE_API_KEY": "brave-key",
+                "XCRAWL_API_KEY": "xcrawl-key",
+            }
+            with patch.object(fetch_web, "load_topics", return_value=[topic]), \
+                 patch.object(fetch_web, "select_brave_key_and_limits", return_value=(None, 0, 0)), \
+                 patch.object(fetch_web, "urlopen", return_value=FakeHTTPResponse(payload)), \
+                 patch.object(sys, "argv", argv), \
+                 patch.dict(fetch_web.os.environ, env, clear=True):
+                exit_code = fetch_web.main()
+
+            self.assertEqual(exit_code, 0)
+            with open(output_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+        self.assertEqual(data["api_used"], "xcrawl")
+        self.assertEqual(data["topics_ok"], 1)
+
+    def test_main_auto_falls_back_to_brave_when_tavily_queries_all_fail(self):
+        topic = {
+            "id": "llm",
+            "search": {"queries": ["llm latest news"], "must_include": [], "exclude": []},
+        }
+        tavily_error = {
+            "topic_id": "llm",
+            "status": "error",
+            "queries_executed": 1,
+            "queries_ok": 0,
+            "query_stats": [{"query": "llm latest news", "status": "error", "count": 0}],
+            "count": 0,
+            "articles": [],
+        }
+        brave_ok = {
+            "topic_id": "llm",
+            "status": "ok",
+            "queries_executed": 1,
+            "queries_ok": 1,
+            "query_stats": [{"query": "llm latest news", "status": "ok", "count": 1}],
+            "count": 1,
+            "articles": [
+                {
+                    "title": "Brave fallback article",
+                    "link": "https://example.com/brave-fallback",
+                    "snippet": "fallback article",
+                    "date": "2026-03-28T00:00:00+00:00",
+                    "topics": ["llm"],
+                }
+            ],
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "web.json"
+            argv = ["fetch-web.py", "--output", str(output_path)]
+            env = {
+                "WEB_SEARCH_BACKEND": "auto",
+                "TAVILY_API_KEY": "tvly-key",
+                "BRAVE_API_KEY": "brave-key",
+            }
+            with patch.object(fetch_web, "load_topics", return_value=[topic]), \
+                 patch.object(fetch_web, "search_topic_tavily", return_value=tavily_error), \
+                 patch.object(fetch_web, "select_brave_key_and_limits", return_value=("brave-key", 1, 1)), \
+                 patch.object(fetch_web, "search_topic_brave", return_value=brave_ok), \
+                 patch.object(sys, "argv", argv), \
+                 patch.dict(fetch_web.os.environ, env, clear=True):
+                exit_code = fetch_web.main()
+
+            self.assertEqual(exit_code, 0)
+            with open(output_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+        self.assertEqual(data["api_used"], "brave")
+        self.assertEqual(data["topics_ok"], 1)
+        self.assertEqual(data["total_articles"], 1)
+
+    def test_main_auto_falls_back_to_xcrawl_when_brave_queries_all_fail(self):
+        topic = {
+            "id": "llm",
+            "search": {"queries": ["llm latest news"], "must_include": [], "exclude": []},
+        }
+        brave_error = {
+            "topic_id": "llm",
+            "status": "error",
+            "queries_executed": 1,
+            "queries_ok": 0,
+            "query_stats": [{"query": "llm latest news", "status": "error", "count": 0}],
+            "count": 0,
+            "articles": [],
+        }
+        xcrawl_ok = {
+            "topic_id": "llm",
+            "status": "ok",
+            "queries_executed": 1,
+            "queries_ok": 1,
+            "query_stats": [{"query": "llm latest news", "status": "ok", "count": 1}],
+            "count": 1,
+            "articles": [
+                {
+                    "title": "XCrawl fallback article",
+                    "link": "https://example.com/xcrawl-fallback",
+                    "snippet": "fallback article",
+                    "date": "2026-03-28T00:00:00+00:00",
+                    "topics": ["llm"],
+                    "source": "xcrawl",
+                }
+            ],
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "web.json"
+            argv = ["fetch-web.py", "--output", str(output_path)]
+            env = {
+                "WEB_SEARCH_BACKEND": "auto",
+                "BRAVE_API_KEY": "brave-key",
+                "XCRAWL_API_KEY": "xcrawl-key",
+            }
+            with patch.object(fetch_web, "load_topics", return_value=[topic]), \
+                 patch.object(fetch_web, "select_brave_key_and_limits", return_value=("brave-key", 1, 1)), \
+                 patch.object(fetch_web, "search_topic_brave", return_value=brave_error), \
+                 patch.object(fetch_web, "search_topic_xcrawl", return_value=xcrawl_ok), \
+                 patch.object(sys, "argv", argv), \
+                 patch.dict(fetch_web.os.environ, env, clear=True):
+                exit_code = fetch_web.main()
+
+            self.assertEqual(exit_code, 0)
+            with open(output_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+        self.assertEqual(data["api_used"], "xcrawl")
+        self.assertEqual(data["topics_ok"], 1)
+        self.assertEqual(data["total_articles"], 1)
+
     def test_main_explicit_xcrawl_keeps_xcrawl_priority(self):
         topic = {
             "id": "crypto",

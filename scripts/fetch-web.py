@@ -600,6 +600,120 @@ def select_web_backend(web_backend: str, tavily_key: Optional[str],
     return "interface"
 
 
+def build_backend_output(args: argparse.Namespace, api_used: str,
+                         results: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Build normalized top-level output for any web backend."""
+    total_articles = sum(r.get("count", 0) for r in results)
+    ok_topics = sum(1 for r in results if r["status"] == "ok")
+    return {
+        "generated": datetime.now(timezone.utc).isoformat(),
+        "source_type": "web",
+        "defaults_dir": str(args.defaults),
+        "config_dir": str(args.config) if args.config else None,
+        "freshness": args.freshness,
+        "api_used": api_used,
+        "topics_total": len(results),
+        "topics_ok": ok_topics,
+        "total_articles": total_articles,
+        "topics": results,
+    }
+
+
+def run_tavily_backend(args: argparse.Namespace, logger: logging.Logger,
+                       topics: List[Dict[str, Any]], tavily_key: str) -> Dict[str, Any]:
+    """Run Tavily searches for all configured topics."""
+    logger.info(f"Using Tavily Search API for {len(topics)} topics")
+
+    tavily_days = None
+    if args.freshness in ('pd',):
+        tavily_days = 1
+    elif args.freshness in ('pw',):
+        tavily_days = 7
+    elif args.freshness in ('pm',):
+        tavily_days = 30
+    elif args.freshness in ('py',):
+        tavily_days = 365
+    else:
+        try:
+            tavily_days = max(1, int(args.freshness.rstrip('h')) // 24)
+        except (ValueError, AttributeError):
+            tavily_days = 2
+
+    results = []
+    for topic in topics:
+        if not topic.get("search", {}).get("queries"):
+            logger.debug(f"Topic {topic['id']} has no search queries, skipping")
+            continue
+        logger.debug(f"Searching topic: {topic['id']}")
+        results.append(search_topic_tavily(topic, tavily_key, days=tavily_days))
+
+    output = build_backend_output(args, "tavily", results)
+    logger.info(f"✅ Done: {output['topics_ok']}/{len(results)} topics ok, {output['total_articles']} articles → {args.output}")
+    return output
+
+
+def run_brave_backend(args: argparse.Namespace, logger: logging.Logger,
+                      topics: List[Dict[str, Any]], brave_keys: List[str]) -> Optional[Dict[str, Any]]:
+    """Run Brave searches for all configured topics. Returns None if no usable key."""
+    api_key, max_qps, max_workers = select_brave_key_and_limits(brave_keys)
+    if not api_key:
+        return None
+
+    global _brave_fallback_keys
+    _brave_fallback_keys = brave_keys
+    logger.info(f"Using Brave Search API for {len(topics)} topics ({len(brave_keys)} key(s) configured)")
+
+    delay = 1.0 / max_qps if max_workers == 1 else 0
+
+    if args.freshness in ('pd', 'pw', 'pm', 'py'):
+        brave_freshness = args.freshness
+    else:
+        freshness_map = {'1w': 168, '1m': 720, '1y': 8760}
+        if args.freshness in freshness_map:
+            freshness_hours = freshness_map[args.freshness]
+        else:
+            try:
+                freshness_hours = int(args.freshness.rstrip('h'))
+            except ValueError:
+                logger.warning(f"Unrecognized freshness format '{args.freshness}', defaulting to 48h")
+                freshness_hours = 48
+        brave_freshness = convert_freshness(freshness_hours)
+
+    results = []
+    for topic in topics:
+        if not topic.get("search", {}).get("queries"):
+            logger.debug(f"Topic {topic['id']} has no search queries, skipping")
+            continue
+
+        logger.debug(f"Searching topic: {topic['id']}")
+        results.append(search_topic_brave(topic, api_key, brave_freshness,
+                                          max_workers=max_workers, delay=delay))
+
+    output = build_backend_output(args, "brave", results)
+    logger.info(f"✅ Searched {output['topics_ok']}/{len(results)} topics, "
+                f"{output['total_articles']} articles found")
+    return output
+
+
+def run_xcrawl_backend(args: argparse.Namespace, logger: logging.Logger,
+                       topics: List[Dict[str, Any]], xcrawl_key: str) -> Dict[str, Any]:
+    """Run XCrawl searches for all configured topics."""
+    logger.info(f"Using XCrawl Search API for {len(topics)} topics")
+
+    results = []
+    for topic in topics:
+        if not topic.get("search", {}).get("queries"):
+            logger.debug(f"Topic {topic['id']} has no search queries, skipping")
+            continue
+        logger.debug(f"Searching topic: {topic['id']}")
+        results.append(search_topic_xcrawl(topic, xcrawl_key))
+
+    output = build_backend_output(args, "xcrawl", results)
+    logger.info(f"✅ Searched {output['topics_ok']}/{len(results)} topics via XCrawl, "
+                f"{output['total_articles']} articles found")
+    return output
+
+
 def main():
     """Main web search function."""
     parser = argparse.ArgumentParser(
@@ -696,152 +810,48 @@ Examples:
         tavily_key = get_tavily_api_key()
         brave_keys = get_brave_api_keys()
         xcrawl_key = get_xcrawl_api_key()
-
-        api_key = None
-        max_qps = 1
-        max_workers = 1
         selected_backend = select_web_backend(web_backend, tavily_key, brave_keys, xcrawl_key)
 
         if web_backend in ('tavily', 'brave', 'xcrawl') and selected_backend == 'interface':
             logger.warning(f"WEB_SEARCH_BACKEND={web_backend} requested but required credentials are missing; falling back to interface output")
+        output = None
 
-        if selected_backend == 'brave':
-            api_key, max_qps, max_workers = select_brave_key_and_limits(brave_keys)
-            if not api_key:
-                selected_backend = 'interface'
+        if web_backend == 'auto':
+            auto_backends = []
+            if tavily_key:
+                auto_backends.append('tavily')
+            if brave_keys:
+                auto_backends.append('brave')
+            if xcrawl_key:
+                auto_backends.append('xcrawl')
 
-        if selected_backend == 'tavily':
-            logger.info(f"Using Tavily Search API for {len(topics)} topics")
-            
-            # Convert freshness to days for Tavily
-            tavily_days = None
-            if args.freshness in ('pd',): tavily_days = 1
-            elif args.freshness in ('pw',): tavily_days = 7
-            elif args.freshness in ('pm',): tavily_days = 30
-            elif args.freshness in ('py',): tavily_days = 365
-            else:
-                try:
-                    tavily_days = max(1, int(args.freshness.rstrip('h')) // 24)
-                except (ValueError, AttributeError):
-                    tavily_days = 2
-            
-            results = []
-            for topic in topics:
-                if not topic.get("search", {}).get("queries"):
-                    logger.debug(f"Topic {topic['id']} has no search queries, skipping")
-                    continue
-                logger.debug(f"Searching topic: {topic['id']}")
-                result = search_topic_tavily(topic, tavily_key, days=tavily_days)
-                results.append(result)
-            
-            total_articles = sum(r.get("count", 0) for r in results)
-            ok_topics = sum(1 for r in results if r["status"] == "ok")
-            
-            output = {
-                "generated": datetime.now(timezone.utc).isoformat(),
-                "source_type": "web",
-                "defaults_dir": str(args.defaults),
-                "config_dir": str(args.config) if args.config else None,
-                "freshness": args.freshness,
-                "api_used": "tavily",
-                "topics_total": len(results),
-                "topics_ok": ok_topics,
-                "total_articles": total_articles,
-                "topics": results,
-            }
-            
-            with open(args.output, 'w', encoding='utf-8') as f:
-                json.dump(output, f, indent=2, ensure_ascii=False)
-            
-            logger.info(f"\u2705 Done: {ok_topics}/{len(topics)} topics ok, {total_articles} articles → {args.output}")
-            return 0
-        
-        elif selected_backend == 'brave':
-            # Set fallback keys for rotation on search errors
-            global _brave_fallback_keys
-            _brave_fallback_keys = brave_keys
-            logger.info(f"Using Brave Search API for {len(topics)} topics ({len(brave_keys)} key(s) configured)")
-            
-            delay = 1.0 / max_qps if max_workers == 1 else 0
-            
-            # Convert freshness to Brave API format
-            # Accept both Brave native (pd/pw/pm/py) and human-friendly (24h/48h/1w/1m)
-            if args.freshness in ('pd', 'pw', 'pm', 'py'):
-                brave_freshness = args.freshness
-            else:
-                freshness_map = {'1w': 168, '1m': 720, '1y': 8760}
-                if args.freshness in freshness_map:
-                    freshness_hours = freshness_map[args.freshness]
+            for idx, backend in enumerate(auto_backends):
+                if backend == 'tavily':
+                    candidate = run_tavily_backend(args, logger, topics, tavily_key)
+                elif backend == 'brave':
+                    candidate = run_brave_backend(args, logger, topics, brave_keys)
+                    if candidate is None:
+                        logger.warning("Brave unavailable in auto mode; trying next backend")
+                        continue
                 else:
-                    try:
-                        freshness_hours = int(args.freshness.rstrip('h'))
-                    except ValueError:
-                        logger.warning(f"Unrecognized freshness format '{args.freshness}', defaulting to 48h")
-                        freshness_hours = 48
-                brave_freshness = convert_freshness(freshness_hours)
-            
-            results = []
-            for topic in topics:
-                if not topic.get("search", {}).get("queries"):
-                    logger.debug(f"Topic {topic['id']} has no search queries, skipping")
-                    continue
-                    
-                logger.debug(f"Searching topic: {topic['id']}")
-                result = search_topic_brave(topic, api_key, brave_freshness,
-                                           max_workers=max_workers, delay=delay)
-                results.append(result)
-            
-            total_articles = sum(r.get("count", 0) for r in results)
-            ok_topics = sum(1 for r in results if r["status"] == "ok")
-            
-            output = {
-                "generated": datetime.now(timezone.utc).isoformat(),
-                "source_type": "web",
-                "defaults_dir": str(args.defaults),
-                "config_dir": str(args.config) if args.config else None,
-                "freshness": args.freshness,
-                "api_used": "brave",
-                "topics_total": len(results),
-                "topics_ok": ok_topics,
-                "total_articles": total_articles,
-                "topics": results
-            }
-            
-            logger.info(f"✅ Searched {ok_topics}/{len(results)} topics, "
-                       f"{total_articles} articles found")
+                    candidate = run_xcrawl_backend(args, logger, topics, xcrawl_key)
 
+                if candidate["topics_ok"] > 0 or idx == len(auto_backends) - 1:
+                    output = candidate
+                    break
+
+                logger.warning(f"{backend} returned 0 successful topics in auto mode; trying next backend")
+
+        elif selected_backend == 'tavily':
+            output = run_tavily_backend(args, logger, topics, tavily_key)
+        elif selected_backend == 'brave':
+            output = run_brave_backend(args, logger, topics, brave_keys)
+            if output is None:
+                selected_backend = 'interface'
         elif selected_backend == 'xcrawl':
-            logger.info(f"Using XCrawl Search API for {len(topics)} topics")
+            output = run_xcrawl_backend(args, logger, topics, xcrawl_key)
 
-            results = []
-            for topic in topics:
-                if not topic.get("search", {}).get("queries"):
-                    logger.debug(f"Topic {topic['id']} has no search queries, skipping")
-                    continue
-                logger.debug(f"Searching topic: {topic['id']}")
-                result = search_topic_xcrawl(topic, xcrawl_key)
-                results.append(result)
-
-            total_articles = sum(r.get("count", 0) for r in results)
-            ok_topics = sum(1 for r in results if r["status"] == "ok")
-
-            output = {
-                "generated": datetime.now(timezone.utc).isoformat(),
-                "source_type": "web",
-                "defaults_dir": str(args.defaults),
-                "config_dir": str(args.config) if args.config else None,
-                "freshness": args.freshness,
-                "api_used": "xcrawl",
-                "topics_total": len(results),
-                "topics_ok": ok_topics,
-                "total_articles": total_articles,
-                "topics": results,
-            }
-
-            logger.info(f"✅ Searched {ok_topics}/{len(results)} topics via XCrawl, "
-                        f"{total_articles} articles found")
-
-        else:
+        if output is None:
             logger.info("No usable web search backend found, generating search interface for agents")
             
             results = []
