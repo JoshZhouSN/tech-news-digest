@@ -10,8 +10,8 @@ Usage:
     python3 fetch-twitter.py --backend twitterapiio  # force twitterapi.io backend
 
 Environment:
-    TWITTER_API_BACKEND - Backend selection: "auto" (default), "getxapi", "twitterapiio", or "official"
-                        Auto priority: getxapi ($0.001/call) > twitterapi.io (~$5/mo) > official X API
+    TWITTER_API_BACKEND - Backend selection: "auto" (default), "getxapi", "twitterapiio", "official", or "bird"
+                        Auto priority: getxapi ($0.001/call) > twitterapi.io (~$5/mo) > official X API > Bird CLI
     GETX_API_KEY        - GetXAPI API key (preferred backend, $0.001 per call)
     TWITTERAPI_IO_KEY   - twitterapi.io API key (alternative backend, ~$5/month)
     X_BEARER_TOKEN      - Twitter/X official API v2 bearer token (fallback)
@@ -958,7 +958,7 @@ def select_backend(backend_name: str, no_cache: bool = False) -> Optional[Twitte
         logging.info("Using Bird CLI backend")
         return BirdBackend()
 
-    # auto: try getxapi first, then twitterapiio, then official
+    # auto: try getxapi first, then twitterapiio, then official, then Bird CLI
     if backend_name == "auto":
         getx_key = os.getenv("GETX_API_KEY")
         if getx_key:
@@ -972,7 +972,14 @@ def select_backend(backend_name: str, no_cache: bool = False) -> Optional[Twitte
         if token:
             logging.info("Auto-selected official X API v2 backend (X_BEARER_TOKEN set)")
             return OfficialBackend(token, no_cache=no_cache)
-        logging.warning("No Twitter API credentials found (checked GETX_API_KEY, TWITTERAPI_IO_KEY, X_BEARER_TOKEN)")
+        ok, error_msg = check_bird_cli()
+        if ok:
+            logging.info("Auto-selected Bird CLI backend (no API credentials found)")
+            return BirdBackend()
+        logging.warning(
+            "No X backend available (checked GETX_API_KEY, TWITTERAPI_IO_KEY, X_BEARER_TOKEN, Bird CLI): %s",
+            error_msg or "Bird CLI unavailable",
+        )
         return None
 
     logging.error(f"Unknown backend: {backend_name}")
@@ -1079,7 +1086,8 @@ Examples:
         choices=["official", "twitterapiio", "getxapi", "bird", "auto"],
         default=None,
         help="Twitter API backend (overrides TWITTER_API_BACKEND env var). "
-             "auto = getxapi if GETX_API_KEY set, else twitterapiio if TWITTERAPI_IO_KEY set, else official if X_BEARER_TOKEN set"
+             "auto = getxapi if GETX_API_KEY set, else twitterapiio if TWITTERAPI_IO_KEY set, "
+             "else official if X_BEARER_TOKEN set, else bird if Bird CLI is available"
     )
 
     args = parser.parse_args()

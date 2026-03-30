@@ -73,7 +73,7 @@ python3 scripts/run-pipeline.py \
 | 层级 | 数量 | 说明 |
 |------|-----:|------|
 | RSS | 78 个订阅源 | OpenAI、Anthropic、Ben's Bites、HN、36Kr、CoinDesk，以及部分 YouTube RSS |
-| X 账号 | 48 个 | 可走 API，也可显式走 Bird 读取本机 X 登录态 |
+| X 账号 | 48 个 | 可走 API；在 auto 模式下也可回退到 Bird 读取本机 X 登录态 |
 | 网页搜索 | 4 个主题 | Tavily、Brave、XCrawl，带时效控制 |
 | GitHub | 28 个仓库 | Release 加 Trending 一起进入总流水线 |
 | Reddit | 13 个子版块 | r/MachineLearning、r/LocalLLaMA、r/CryptoCurrency 等 |
@@ -101,10 +101,10 @@ run-pipeline.py
 
 ### X 层：通过 Bird 读取 X
 
-- `TWITTER_API_BACKEND=auto` 只会在 `getxapi -> twitterapiio -> official` 之间自动选
-- Bird 不会被 `auto` 自动选中，只有你显式传 `--backend bird`，或者设置 `TWITTER_API_BACKEND=bird`，才会启用
+- `TWITTER_API_BACKEND=auto` 会按 `getxapi -> twitterapiio -> official -> bird` 依次尝试
+- Bird 仍然支持显式启用：传 `--backend bird`，或者设置 `TWITTER_API_BACKEND=bird`
 - Bird 依赖本机 X 登录态、浏览器 cookie，或者 `AUTH_TOKEN` 和 `CT0`
-- 这更适合有人值守的本机抓取，不适合作为默认无人值守服务器模式
+- 在 `auto` 模式下，只有当前面 API 凭证都不可用、且 Bird CLI 登录态可用时，才会回退到 Bird
 
 如果你要走 Bird：
 

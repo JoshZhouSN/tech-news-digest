@@ -73,7 +73,7 @@ A scored, deduplicated digest built from 167 built-in sources:
 | Layer | Count | Notes |
 |-------|------:|-------|
 | RSS | 78 feeds | OpenAI, Anthropic, Ben's Bites, HN, 36Kr, CoinDesk, YouTube-via-RSS |
-| X accounts | 48 | KOL/account timelines via API backends or explicit Bird backend |
+| X accounts | 48 | KOL/account timelines via API backends or Bird CLI fallback in auto mode |
 | Web search | 4 topics | Tavily, Brave, or XCrawl with freshness control |
 | GitHub | 28 repos | Releases plus trending coverage in the pipeline |
 | Reddit | 13 subs | r/MachineLearning, r/LocalLLaMA, r/CryptoCurrency, and more |
@@ -101,10 +101,10 @@ These are the two search-related additions you need to understand before running
 
 ### X via Bird
 
-- `TWITTER_API_BACKEND=auto` only tries `getxapi -> twitterapiio -> official`
-- Bird is explicit opt-in only: use `--backend bird` or `TWITTER_API_BACKEND=bird`
+- `TWITTER_API_BACKEND=auto` tries `getxapi -> twitterapiio -> official -> bird`
+- Bird still supports explicit opt-in with `--backend bird` or `TWITTER_API_BACKEND=bird`
 - Bird reads your local X session through the Bird CLI, browser cookies, or `AUTH_TOKEN` plus `CT0`
-- Bird is suited to local operator workflows, not unattended default server mode
+- In `auto` mode, Bird is only used when API credentials are unavailable and the Bird CLI session is usable
 
 Install Bird if you want the local-session path:
 

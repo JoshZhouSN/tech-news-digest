@@ -117,10 +117,26 @@ class TestSelectBackend(unittest.TestCase):
                 backend = fetch_twitter.select_backend("bird")
         self.assertIsInstance(backend, backend_cls)
 
-    def test_auto_does_not_select_bird(self):
+    def test_auto_falls_back_to_bird_when_api_credentials_are_missing(self):
+        backend_cls = getattr(fetch_twitter, "BirdBackend", None)
+        self.assertIsNotNone(backend_cls, "BirdBackend should exist")
         with mock.patch.dict(os.environ, {"BIRD_CLI": "bird"}, clear=True):
-            backend = fetch_twitter.select_backend("auto")
-        self.assertIsNone(backend)
+            with mock.patch.object(fetch_twitter, "check_bird_cli", return_value=(True, None)):
+                backend = fetch_twitter.select_backend("auto")
+        self.assertIsInstance(backend, backend_cls)
+
+    def test_auto_prefers_api_backends_before_bird(self):
+        with mock.patch.dict(
+            os.environ,
+            {
+                "GETX_API_KEY": "test-getx-key",
+                "BIRD_CLI": "bird",
+            },
+            clear=True,
+        ):
+            with mock.patch.object(fetch_twitter, "check_bird_cli", return_value=(True, None)):
+                backend = fetch_twitter.select_backend("auto")
+        self.assertIsInstance(backend, fetch_twitter.GetXApiBackend)
 
     def test_bird_backend_unavailable_returns_none(self):
         with mock.patch.dict(os.environ, {"BIRD_CLI": "bird"}, clear=True):

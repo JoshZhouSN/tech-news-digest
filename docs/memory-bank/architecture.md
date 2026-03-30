@@ -79,11 +79,11 @@ run-pipeline.py
 
 ### X 层
 
-- `TWITTER_API_BACKEND=auto` 只会尝试 `getxapi -> twitterapiio -> official`
-- Bird 不属于 auto 链路，只有显式传 `--backend bird` 或设置 `TWITTER_API_BACKEND=bird` 才会启用
+- `TWITTER_API_BACKEND=auto` 会尝试 `getxapi -> twitterapiio -> official -> bird`
+- Bird 既可显式启用，也会在 auto 模式下于 API 不可用时作为最后兜底
 - Bird 依赖本机网页登录态或 `AUTH_TOKEN` / `CT0`
 
-这意味着 Bird 更像“本机操作员模式”，不是默认服务器模式。
+这意味着 Bird 仍然更像“本机操作员模式”，但现在本机 auto 流程在 API 不可用时也能自动接住它。
 
 ### Web 层
 

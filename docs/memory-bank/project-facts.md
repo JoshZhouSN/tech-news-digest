@@ -93,7 +93,7 @@ python3 scripts/fetch-web.py \
 
 当前搜索相关后端真实规则：
 
-- X 层：`TWITTER_API_BACKEND=auto` 只会在 `getxapi -> twitterapiio -> official` 之间选，Bird 必须显式启用
+- X 层：`TWITTER_API_BACKEND=auto` 会按 `getxapi -> twitterapiio -> official -> bird` 依次尝试；当前面 API 不可用且 Bird CLI 可用时，会自动回退到 Bird
 - Web 层：`WEB_SEARCH_BACKEND=auto` 会按 `tavily -> brave -> xcrawl -> interface` 依次尝试
 - 显式指定 `tavily`、`brave` 或 `xcrawl` 但缺少凭证时：不会偷偷切到别家，而是直接退回 interface 输出
 

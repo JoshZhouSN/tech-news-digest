@@ -43,9 +43,9 @@ mkdir -p workspace/config workspace/archive/tech-news-digest
 
 ## 2. X / Bird 运行说明
 
-- `TWITTER_API_BACKEND=auto` 不会自动选 Bird
-- `auto` 只会在 `getxapi -> twitterapiio -> official` 之间选
-- 只有显式传 `--backend bird` 或设置 `TWITTER_API_BACKEND=bird` 时，才会走 Bird
+- `TWITTER_API_BACKEND=auto` 会按 `getxapi -> twitterapiio -> official -> bird` 依次尝试
+- 当前面 API 凭证都不可用、且 Bird CLI 登录态可用时，`auto` 会自动回退到 Bird
+- 你仍然可以显式传 `--backend bird` 或设置 `TWITTER_API_BACKEND=bird`，强制走 Bird
 - Bird 适合“有人在本机登录过 X、希望直接读取动态”的场景，不适合作为默认服务器后端
 - Bird CLI 默认命令是 `bird`，也可以通过 `BIRD_CLI="bunx @steipete/bird"` 覆盖
 
