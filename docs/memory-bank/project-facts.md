@@ -58,7 +58,7 @@ python3 scripts/validate-config.py --defaults config/defaults --verbose
 
 ## 5. 已知外部依赖
 
-- Twitter/X：依赖 `TWITTERAPI_IO_KEY` 或 `X_BEARER_TOKEN`
+- Twitter/X：默认依赖 `GETX_API_KEY`、`TWITTERAPI_IO_KEY` 或 `X_BEARER_TOKEN`；也可显式走 Bird，本机使用 `BIRD_CLI` + 浏览器登录态或 `AUTH_TOKEN` / `CT0`
 - Web Search：依赖 `TAVILY_API_KEY`、`BRAVE_API_KEY` / `BRAVE_API_KEYS` 或 `XCRAWL_API_KEY`
 - GitHub：`GITHUB_TOKEN` 可提升限流表现
 - PDF：`weasyprint`

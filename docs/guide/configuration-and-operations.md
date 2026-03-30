@@ -21,6 +21,24 @@ python3 -m pip install -r requirements.txt
 
 - 没有密钥时，项目不一定完全失败
 - 但对应来源会被跳过，最终日报覆盖率会下降
+- Bird 不是 API key 模式，它依赖本机 X 网页登录态或 `AUTH_TOKEN` / `CT0`
+
+### X / Bird 额外说明
+
+- `TWITTER_API_BACKEND=auto` 不会自动选 Bird，`auto` 仍然只会在 `getxapi -> twitterapiio -> official` 之间挑
+- 只有显式传 `--backend bird` 或设置 `TWITTER_API_BACKEND=bird` 时，才会走 Bird
+- Bird 适合“有人在本机登录过 X、希望直接读取动态”的场景，不适合作为默认服务器后端
+- Bird CLI 默认命令是 `bird`，也可以通过 `BIRD_CLI="bunx @steipete/bird"` 覆盖
+- Bird 节奏控制参数：
+  - `BIRD_MAX_WORKERS`：Bird 抓取并发数，默认 `1`
+  - `BIRD_REQUEST_INTERVAL_SEC`：账号之间的等待秒数，默认 `2`
+  - `BIRD_BATCH_SIZE`：每批账号数，默认 `25`
+  - `BIRD_BATCH_COOLDOWN_SEC`：每批结束后的额外冷却秒数，默认 `900`
+  - `BIRD_429_COOLDOWN_SEC`：每次遇到 `429` 后的冷却秒数，默认 `900`
+  - `BIRD_MAX_CONSECUTIVE_429`：连续 `429` 达到多少次后触发旧止损逻辑，默认 `0`（关闭）
+- 默认恢复策略：
+  - 每成功完成 `25` 个账号后，Bird 自动休眠 `15` 分钟，再从下一个账号继续
+  - 每次遇到 `429` 时，Bird 自动休眠 `15` 分钟，然后重试当前账号，不会直接跳过断点
 
 网页搜索的当前真实优先级是：
 
@@ -83,6 +101,11 @@ python3 scripts/fetch-web.py --defaults config/defaults --freshness pd --output 
 - `topics_ok` 是否大于 `0`
 - `topics[].articles[]` 是否已经有统一字段结构
 
+### 只测 Bird 的 X 抓取
+
+```bash
+bash scripts/test-pipeline.sh --only twitter --twitter-backend bird --ids steipete-twitter --hours 24
+```
 ## 4. 排障入口
 
 ### 问题：某类内容突然明显变少
@@ -93,6 +116,7 @@ python3 scripts/fetch-web.py --defaults config/defaults --freshness pd --output 
 - 外部平台是否限流
 - `scripts/test-pipeline.sh` 单独跑该来源是否失败
 - 是否是 `config/defaults/sources.json` 中被误关掉
+- 如果使用 Bird，再检查本机 X 登录态是否还有效，或 `AUTH_TOKEN` / `CT0` 是否过期
 
 如果是网页搜索层，还要额外检查：
 

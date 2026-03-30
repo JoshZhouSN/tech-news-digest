@@ -53,6 +53,8 @@ run-pipeline.py
 
 这些脚本的共同目标，是把来源各异的数据转成后续可统一处理的结构。
 
+其中 `fetch-twitter.py` 目前支持官方 API、GetXAPI、twitterapi.io，以及显式可选的 Bird CLI。前 3 种更偏“密钥驱动”，Bird 更偏“本机网页登录态驱动”。
+
 ### 处理层
 
 - `scripts/merge-sources.py`
