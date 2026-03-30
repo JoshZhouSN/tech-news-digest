@@ -1,6 +1,6 @@
 # Tech News Digest
 
-> Automated tech news digest — 151 sources, 6-source pipeline, one chat message to install.
+> Automated tech news digest from 167 built-in sources (165 enabled), 6 fetch steps, and configurable X plus web search backends.
 
 **English** | [中文](README_CN.md)
 
@@ -9,167 +9,281 @@
 [![ClawHub](https://img.shields.io/badge/ClawHub-tech--news--digest-blueviolet)](https://clawhub.com/draco-agent/tech-news-digest)
 [![MIT License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-## 💬 Install in One Message
+## Install
 
-Tell your [OpenClaw](https://openclaw.ai) AI assistant:
+### Option A: install in one message
+
+Tell your [OpenClaw](https://openclaw.ai) assistant:
 
 > **"Install tech-news-digest and send a daily digest to #tech-news every morning at 9am"**
 
-That's it. Your bot handles installation, configuration, scheduling, and delivery — all through conversation.
-
 More examples:
 
-> 🗣️ "Set up a weekly AI digest, only LLM and AI Agent topics, deliver to Discord #ai-weekly every Monday"
+> "Set up a weekly AI digest, only LLM and AI Agent topics, deliver to Discord #ai-weekly every Monday"
 
-> 🗣️ "Install tech-news-digest, add my RSS feeds, and send crypto news to Telegram"
+> "Install tech-news-digest, add my RSS feeds, and send crypto news to Telegram"
 
-> 🗣️ "Give me a tech digest right now, skip Twitter sources"
+> "Give me a tech digest right now, skip Twitter sources"
 
 Or install via CLI:
+
 ```bash
 clawhub install tech-news-digest
 ```
 
-## 📊 What You Get
+### Option B: local quick start
 
-A quality-scored, deduplicated tech digest built from **151 sources**:
+```bash
+git clone https://github.com/draco-agent/tech-news-digest.git
+cd tech-news-digest
 
-| Layer | Sources | What |
-|-------|---------|------|
-| 📡 RSS | 49 feeds | OpenAI, Anthropic, Ben's Bites, HN, 36氪, CoinDesk… |
-| 🐦 Twitter/X | 48 KOLs | @karpathy, @VitalikButerin, @sama, @elonmusk… |
-| 🔍 Web Search | 4 topics | Tavily or Brave Search API with freshness filters |
-| 🐙 GitHub | 28 repos | Releases from key projects (LangChain, vLLM, DeepSeek, Llama…) |
-| 🗣️ Reddit | 13 subs | r/MachineLearning, r/LocalLLaMA, r/CryptoCurrency… |
+python3 -m venv .venv
+source .venv/bin/activate
+python3 -m pip install -r requirements.txt
+
+cp .env.example .env
+# edit .env, then export it into your shell
+set -a
+source .env
+set +a
+
+mkdir -p workspace/config workspace/archive/tech-news-digest
+python3 scripts/validate-config.py --defaults config/defaults --verbose
+
+python3 scripts/run-pipeline.py \
+  --defaults config/defaults \
+  --config workspace/config \
+  --hours 48 \
+  --freshness pd \
+  --archive-dir workspace/archive/tech-news-digest \
+  --output /tmp/td-merged.json \
+  --verbose
+```
+
+What to expect:
+
+- Merged digest JSON at `/tmp/td-merged.json`
+- Pipeline metadata at `/tmp/td-merged.meta.json`
+- Optional user overrides in `workspace/config/`
+
+## What You Get
+
+A scored, deduplicated digest built from 167 built-in sources:
+
+| Layer | Count | Notes |
+|-------|------:|-------|
+| RSS | 78 feeds | OpenAI, Anthropic, Ben's Bites, HN, 36Kr, CoinDesk, YouTube-via-RSS |
+| X accounts | 48 | KOL/account timelines via API backends or explicit Bird backend |
+| Web search | 4 topics | Tavily, Brave, or XCrawl with freshness control |
+| GitHub | 28 repos | Releases plus trending coverage in the pipeline |
+| Reddit | 13 subs | r/MachineLearning, r/LocalLLaMA, r/CryptoCurrency, and more |
 
 ### Pipeline
 
+```text
+run-pipeline.py
+  -> fetch-rss.py
+  -> fetch-twitter.py
+  -> fetch-github.py
+  -> fetch-github.py --trending
+  -> fetch-reddit.py
+  -> fetch-web.py
+  -> merge-sources.py
+  -> enrich-articles.py (optional)
+  -> downstream templates / delivery
 ```
-       run-pipeline.py (~30s)
-              ↓
-  RSS ────────┐
-  Twitter ────┤
-  Web ────────┤── parallel fetch ──→ merge-sources.py
-  GitHub ─────┤                          ↓
-  GitHub Tr. ─┤              enrich-articles.py (opt-in)
-  Reddit ─────┘                          ↓
-              Quality Scoring → Dedup → Topic Grouping
-                             ↓
-               Discord / Email / PDF output
-```
 
-**Quality scoring**: priority source (+3), multi-source cross-ref (+5), recency (+2), engagement (+1), Reddit score bonus (+1/+3/+5), already reported (-5).
+Quality scoring favors priority sources, cross-source confirmation, recency, engagement, and topic fit, then penalizes already-reported items.
 
-## ⚙️ Configuration
+## X and Web Backends
 
-- `config/defaults/sources.json` — 151 built-in sources (62 RSS, 48 Twitter, 28 GitHub, 13 Reddit)
-- `config/defaults/topics.json` — 4 topics with search queries & Twitter queries
-- User overrides in `workspace/config/` take priority
+These are the two search-related additions you need to understand before running the project.
 
-## 🎨 Customize Your Sources
+### X via Bird
 
-Works out of the box with 151 built-in sources (62 RSS, 48 Twitter, 28 GitHub, 13 Reddit) — but fully customizable. Copy the defaults to your workspace config and override:
+- `TWITTER_API_BACKEND=auto` only tries `getxapi -> twitterapiio -> official`
+- Bird is explicit opt-in only: use `--backend bird` or `TWITTER_API_BACKEND=bird`
+- Bird reads your local X session through the Bird CLI, browser cookies, or `AUTH_TOKEN` plus `CT0`
+- Bird is suited to local operator workflows, not unattended default server mode
+
+Install Bird if you want the local-session path:
 
 ```bash
-# Copy and customize
-cp config/defaults/sources.json workspace/config/tech-news-digest-sources.json
-cp config/defaults/topics.json workspace/config/tech-news-digest-topics.json
+npm install -g @steipete/bird
+# or keep the repo dependency-free and run it on demand
+export BIRD_CLI="bunx @steipete/bird"
+bird whoami --plain
 ```
 
-Your overlay file **merges** with defaults:
-- **Override** a source by matching its `id` — your version replaces the default
-- **Add** new sources with a unique `id` — appended to the list
-- **Disable** a built-in source — set `"enabled": false` on the matching `id`
+Run only the X layer with Bird:
+
+```bash
+python3 scripts/fetch-twitter.py \
+  --defaults config/defaults \
+  --config workspace/config \
+  --hours 24 \
+  --backend bird \
+  --output /tmp/td-twitter.json \
+  --verbose
+```
+
+Useful Bird pacing knobs:
+
+- `BIRD_MAX_WORKERS=1`
+- `BIRD_REQUEST_INTERVAL_SEC=2.0`
+- `BIRD_BATCH_SIZE=25`
+- `BIRD_BATCH_COOLDOWN_SEC=900`
+- `BIRD_429_COOLDOWN_SEC=900`
+- `BIRD_MAX_CONSECUTIVE_429=0`
+
+### Web search via XCrawl
+
+- `WEB_SEARCH_BACKEND=auto` tries `tavily -> brave -> xcrawl -> interface`
+- If you explicitly set `tavily`, `brave`, or `xcrawl` without valid credentials, the script falls back to `interface` JSON instead of silently switching providers
+- `XCRAWL_API_KEY` enables XCrawl directly or as the third fallback in `auto`
+
+Run only the web layer:
+
+```bash
+python3 scripts/fetch-web.py \
+  --defaults config/defaults \
+  --config workspace/config \
+  --freshness pd \
+  --output /tmp/td-web.json \
+  --verbose
+```
+
+Check three fields in the output:
+
+- `api_used`
+- `topics_ok`
+- `topics[].articles[]`
+
+## Configuration
+
+- Defaults live in `config/defaults/sources.json` and `config/defaults/topics.json`
+- User overlays live in `workspace/config/tech-news-digest-sources.json` and `workspace/config/tech-news-digest-topics.json`
+- Overlay rules:
+  - matching `id` replaces the default entry
+  - new `id` appends a new entry
+  - `"enabled": false` disables a built-in source
+
+Example overlay:
 
 ```json
 {
   "sources": [
-    {"id": "my-blog", "type": "rss", "enabled": true, "url": "https://myblog.com/feed", "topics": ["llm"]},
-    {"id": "openai-blog", "enabled": false}
+    {
+      "id": "my-blog",
+      "type": "rss",
+      "enabled": true,
+      "url": "https://myblog.com/feed",
+      "topics": ["llm"]
+    },
+    {
+      "id": "openai-blog",
+      "enabled": false
+    }
   ]
 }
 ```
 
-No need to copy the entire file — just include what you want to change.
+## Environment Variables
 
-## 🔧 Environment Variables
-
-All environment variables are optional. The pipeline runs with whatever sources are available.
+Use `.env.example` as the reference list, then export the values into your shell before running the scripts.
 
 ```bash
-# Twitter/X Backend (auto priority: getxapi > twitterapiio > official)
-export GETX_API_KEY="..."        # GetXAPI
-export TWITTERAPI_IO_KEY="..."   # twitterapi.io
-export X_BEARER_TOKEN="..."      # Official X API v2
-export TWITTER_API_BACKEND="auto"  # auto|getxapi|twitterapiio|bird|official
-# Bird CLI (explicit opt-in backend, not used by auto)
-export BIRD_CLI="bird"             # or: bunx @steipete/bird
-export AUTH_TOKEN="..."            # optional if Bird reads cookies from browser
-export CT0="..."                   # optional if Bird reads cookies from browser
-export BIRD_MAX_WORKERS="1"        # keep Bird serialized by default
+# X API backends
+export GETX_API_KEY=""
+export TWITTERAPI_IO_KEY=""
+export X_BEARER_TOKEN=""
+export TWITTER_API_BACKEND="auto"
+
+# Bird backend for local X session
+export BIRD_CLI="bird"
+export AUTH_TOKEN=""
+export CT0=""
+export BIRD_MAX_WORKERS="1"
 export BIRD_REQUEST_INTERVAL_SEC="2.0"
-export BIRD_BATCH_SIZE="25"        # pause after each 25 completed accounts
+export BIRD_BATCH_SIZE="25"
 export BIRD_BATCH_COOLDOWN_SEC="900"
-export BIRD_429_COOLDOWN_SEC="900" # every 429 cools down, then retries same account
-export BIRD_MAX_CONSECUTIVE_429="0" # 0 disables the old rate-limit guard
-# Web Search
-export TAVILY_API_KEY="tvly-xxx"   # Tavily Search API
-export BRAVE_API_KEYS="k1,k2,k3"   # Brave Search API keys (comma-separated for rotation)
-export BRAVE_API_KEY="..."         # Single Brave key
-export XCRAWL_API_KEY="..."        # XCrawl Search API
-export WEB_SEARCH_BACKEND="auto"   # auto|tavily|brave|xcrawl
+export BIRD_429_COOLDOWN_SEC="900"
+export BIRD_MAX_CONSECUTIVE_429="0"
+
+# Web search backends
+export TAVILY_API_KEY=""
+export BRAVE_API_KEYS=""
+export BRAVE_API_KEY=""
+export XCRAWL_API_KEY=""
+export WEB_SEARCH_BACKEND="auto"
+export BRAVE_PLAN="free"
+
 # GitHub
-export GITHUB_TOKEN="..."          # GitHub API
-# Other
-export BRAVE_PLAN="free"           # Override Brave rate limit: free|pro
+export GITHUB_TOKEN=""
 ```
 
-Web search backend priority is `tavily -> brave -> xcrawl -> interface`.
-If none of the three providers are available, the pipeline still emits interface JSON as a fallback so downstream steps can continue.
+## Common Commands
 
-## 📦 Dependencies
-
-### Core (required)
-
-The skill requires Python 3.8+ and two optional dependencies for enhanced functionality:
+Validate config:
 
 ```bash
-pip install -r requirements.txt
-# or
-pip install feedparser>=6.0.0 jsonschema>=4.0.0
+python3 scripts/validate-config.py --defaults config/defaults --verbose
 ```
 
-- **feedparser** — RSS/Atom feed parsing (fallback to regex if not installed)
-- **jsonschema** — JSON Schema validation for config files
-
-### Optional
+Run the full pipeline:
 
 ```bash
-pip install weasyprint
+python3 scripts/run-pipeline.py \
+  --defaults config/defaults \
+  --config workspace/config \
+  --hours 48 \
+  --freshness pd \
+  --archive-dir workspace/archive/tech-news-digest \
+  --output /tmp/td-merged.json \
+  --verbose
 ```
 
-- **weasyprint** — Enables PDF report generation
-
-Optional Bird runtime for reading X via local web session:
+Run a lightweight smoke test:
 
 ```bash
-npm install -g @steipete/bird
-# or keep the repo dependency-free and run it ad hoc:
-export BIRD_CLI="bunx @steipete/bird"
+bash scripts/test-pipeline.sh --only rss,github,web --hours 24
 ```
 
-Bird is an explicit opt-in backend for `fetch-twitter.py --backend bird`. It uses your X web session cookies or `AUTH_TOKEN`/`CT0`, not an official API key, so it fits local operator workflows better than headless server defaults.
+Run unit tests:
 
-If you are trying to maximize Bird coverage across many accounts, tune pacing rather than adding concurrency. The Bird backend now supports serialized execution plus request/batch cooldown environment variables so you can trade runtime for lower rate-limit pressure.
+```bash
+python3 -m unittest discover -s tests -v
+```
 
-## 📂 Repository
+Current offline test baseline: 65 tests passing.
+
+## Dependencies
+
+Core:
+
+```bash
+python3 -m pip install -r requirements.txt
+```
+
+- `feedparser` for robust RSS parsing
+- `jsonschema` for config validation
+
+Optional:
+
+```bash
+python3 -m pip install weasyprint
+```
+
+- `weasyprint` enables PDF generation
+
+## Repository
 
 **GitHub**: [github.com/draco-agent/tech-news-digest](https://github.com/draco-agent/tech-news-digest)
 
-## 🌟 Featured In
+## Featured In
 
-- [Awesome OpenClaw Use Cases](https://github.com/hesamsheikh/awesome-openclaw-usecases) — Community-curated collection of OpenClaw agent use cases
+- [Awesome OpenClaw Use Cases](https://github.com/hesamsheikh/awesome-openclaw-usecases)
 
-## 📄 License
+## License
 
-MIT License — see [LICENSE](LICENSE) for details.
+MIT License. See [LICENSE](LICENSE).

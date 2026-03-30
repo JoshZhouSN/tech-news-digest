@@ -1,5 +1,24 @@
 # Changelog
 
+## v3.17.0 — 2026-03-30
+
+### Added
+- **Bird backend for X collection** via explicit `--backend bird` or `TWITTER_API_BACKEND=bird`
+  - Supports local X session through Bird CLI, browser cookies, or `AUTH_TOKEN` plus `CT0`
+  - Added pacing controls: `BIRD_MAX_WORKERS`, `BIRD_REQUEST_INTERVAL_SEC`, `BIRD_BATCH_SIZE`,
+    `BIRD_BATCH_COOLDOWN_SEC`, `BIRD_429_COOLDOWN_SEC`, `BIRD_MAX_CONSECUTIVE_429`
+- **XCrawl web search backend** via `XCRAWL_API_KEY`
+  - `WEB_SEARCH_BACKEND=auto` now tries `tavily -> brave -> xcrawl -> interface`
+  - Auto mode continues to the next backend when Brave is unavailable or returns zero successful topics
+- `.env.example` for local environment setup
+
+### Changed
+- README and README_CN rewritten around install, local quick start, Bird usage, and XCrawl usage
+- Docs refreshed to reflect 167 sources, 65 passing offline tests, and the current backend selection rules
+
+### Fixed
+- Environment template now includes `XCRAWL_API_KEY` and correct backend priority comments
+
 ## v3.16.0 — 2026-03-26
 
 ### Added
