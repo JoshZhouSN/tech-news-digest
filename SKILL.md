@@ -1,36 +1,54 @@
 ---
 name: tech-news-digest
 description: Generate tech news digests with unified source model, quality scoring, and multi-format output. Six-source data collection from RSS feeds, Twitter/X KOLs, GitHub releases, GitHub Trending, Reddit, and web search. Pipeline-based scripts with retry mechanisms and deduplication. Supports Discord, email, and markdown templates.
-version: "3.16.0"
+version: "3.17.0"
 homepage: https://github.com/draco-agent/tech-news-digest
 source: https://github.com/draco-agent/tech-news-digest
 metadata:
   openclaw:
     requires:
       bins: ["python3"]
-    optionalBins: ["mail", "msmtp", "gog", "gh", "openssl", "weasyprint"]
+    optionalBins: ["mail", "msmtp", "gog", "gh", "openssl", "weasyprint", "bird", "bunx"]
 env:
   - name: TWITTER_API_BACKEND
     required: false
-    description: "Twitter API backend: 'official', 'twitterapiio', or 'auto' (default: auto)"
+    description: "Twitter/X backend: 'auto', 'getxapi', 'twitterapiio', 'official', or 'bird' (Bird is explicit opt-in on current main)"
+  - name: GETX_API_KEY
+    required: false
+    description: GetXAPI key for X/Twitter collection (preferred auto backend)
   - name: X_BEARER_TOKEN
     required: false
     description: Twitter/X API bearer token for KOL monitoring (official backend)
   - name: TWITTERAPI_IO_KEY
     required: false
     description: twitterapi.io API key for KOL monitoring (twitterapiio backend)
+  - name: BIRD_CLI
+    required: false
+    description: Bird CLI command for local X session access (default: bird)
+  - name: AUTH_TOKEN
+    required: false
+    description: Optional X auth_token for Bird when browser cookies are unavailable
+  - name: CT0
+    required: false
+    description: Optional X ct0 token for Bird when browser cookies are unavailable
   - name: TAVILY_API_KEY
     required: false
     description: Tavily Search API key (alternative to Brave)
   - name: WEB_SEARCH_BACKEND
     required: false
-    description: "Web search backend: auto (default), brave, or tavily"
+    description: "Web search backend: auto (default), tavily, brave, or xcrawl"
   - name: BRAVE_API_KEYS
     required: false
     description: Brave Search API keys (comma-separated for rotation)
   - name: BRAVE_API_KEY
     required: false
     description: Brave Search API key (single key fallback)
+  - name: BRAVE_PLAN
+    required: false
+    description: Optional Brave plan hint for rate-limit behavior (free or pro)
+  - name: XCRAWL_API_KEY
+    required: false
+    description: XCrawl Search API key for explicit XCrawl mode or auto fallback
   - name: GITHUB_TOKEN
     required: false
     description: GitHub token for higher API rate limits (auto-generated from GitHub App if not set)
@@ -74,12 +92,17 @@ Automated tech news digest system with unified data source model, quality scorin
    ```
 
 2. **Environment Variables**: 
+   - `GETX_API_KEY` - GetXAPI key for X/Twitter collection (optional, preferred auto backend)
    - `TWITTERAPI_IO_KEY` - twitterapi.io API key (optional, preferred)
    - `X_BEARER_TOKEN` - Twitter/X official API bearer token (optional, fallback)
-   - `TAVILY_API_KEY` - Tavily Search API key, alternative to Brave (optional)
-   - `WEB_SEARCH_BACKEND` - Web search backend: auto|brave|tavily (optional, default: auto)
+   - `BIRD_CLI` - Bird CLI command for local X session access (optional, explicit Bird backend)
+   - `AUTH_TOKEN` / `CT0` - Optional X session tokens for Bird when browser cookies are unavailable
+   - `TAVILY_API_KEY` - Tavily Search API key (optional, first auto web backend)
+   - `XCRAWL_API_KEY` - XCrawl Search API key (optional, explicit backend or auto fallback)
+   - `WEB_SEARCH_BACKEND` - Web search backend: auto|tavily|brave|xcrawl (optional, default: auto)
    - `BRAVE_API_KEYS` - Brave Search API keys, comma-separated for rotation (optional)
    - `BRAVE_API_KEY` - Single Brave key fallback (optional)
+   - `BRAVE_PLAN` - Brave rate-limit hint: free|pro (optional)
    - `GITHUB_TOKEN` - GitHub personal access token (optional, improves rate limits)
 
 3. **Generate Digest**:
@@ -175,17 +198,19 @@ python3 scripts/fetch-rss.py [--defaults DIR] [--config DIR] [--hours 48] [--out
 
 #### `fetch-twitter.py` - Twitter/X KOL Monitor
 ```bash
-python3 scripts/fetch-twitter.py [--defaults DIR] [--config DIR] [--hours 48] [--output FILE] [--backend auto|official|twitterapiio]
+python3 scripts/fetch-twitter.py [--defaults DIR] [--config DIR] [--hours 48] [--output FILE] [--backend auto|getxapi|official|twitterapiio|bird]
 ```
-- Backend auto-detection: uses twitterapi.io if `TWITTERAPI_IO_KEY` set, else official X API v2 if `X_BEARER_TOKEN` set
+- Backend auto-detection on current main: `getxapi -> twitterapiio -> official`
+- Bird CLI is available as an explicit backend for local X session access (`--backend bird`)
 - Rate limit handling, engagement metrics, retry with backoff
 
 #### `fetch-web.py` - Web Search Engine
 ```bash
 python3 scripts/fetch-web.py [--defaults DIR] [--config DIR] [--freshness pd] [--output FILE]
 ```
+- Auto backend order: `tavily -> brave -> xcrawl -> interface`
+- Explicit `tavily` / `brave` / `xcrawl` without valid credentials falls back to interface JSON instead of silently switching providers
 - Auto-detects Brave API rate limit: paid plans → parallel queries, free → sequential
-- Without API: generates search interface for agents
 
 #### `fetch-github.py` - GitHub Releases Monitor
 ```bash
@@ -312,9 +337,9 @@ Place custom configs in `workspace/config/` to override defaults:
 - Emoji icons, page headers/footers with page numbers
 - Generated via `scripts/generate-pdf.py` (requires `weasyprint`)
 
-## Default Sources (151 total)
+## Default Sources (167 total, 165 enabled)
 
-- **RSS Feeds (62)**: AI labs, tech blogs, crypto news, Chinese tech media
+- **RSS Feeds (78)**: AI labs, tech blogs, crypto news, Chinese tech media
 - **Twitter/X KOLs (48)**: AI researchers, crypto leaders, tech executives
 - **GitHub Repos (28)**: Major open-source projects (LangChain, vLLM, DeepSeek, Llama, etc.)
 - **Reddit (13)**: r/MachineLearning, r/LocalLLaMA, r/CryptoCurrency, r/ChatGPT, r/OpenAI, etc.
@@ -349,9 +374,9 @@ python3 scripts/fetch-twitter.py --hours 1 --verbose
 ```
 
 ### Archive Management
-- Digests automatically archived to `<workspace>/archive/tech-news-digest/`
-- Previous digest titles used for duplicate detection
-- Old archives cleaned automatically (90+ days)
+- The full prompt workflow saves generated digests to `<workspace>/archive/tech-news-digest/`
+- Previous digest titles are used for duplicate detection when archive files exist
+- Old archive cleanup is handled by the prompt workflow, not by `run-pipeline.py` itself
 
 ### Error Handling
 - **Network Failures**: Retry with exponential backoff
@@ -364,13 +389,20 @@ python3 scripts/fetch-twitter.py --hours 1 --verbose
 Set in `~/.zshenv` or similar:
 ```bash
 # Twitter (at least one required for Twitter source)
-export TWITTERAPI_IO_KEY="your_key"        # twitterapi.io key (preferred)
-export X_BEARER_TOKEN="your_bearer_token"  # Official X API v2 (fallback)
-export TWITTER_API_BACKEND="auto"          # auto|twitterapiio|official (default: auto)
+export GETX_API_KEY="your_key"             # GetXAPI key (preferred auto backend)
+export TWITTERAPI_IO_KEY="your_key"        # twitterapi.io key
+export X_BEARER_TOKEN="your_bearer_token"  # Official X API v2 fallback
+export TWITTER_API_BACKEND="auto"          # auto|getxapi|twitterapiio|official|bird
+
+# Bird (explicit local-session backend)
+export BIRD_CLI="bird"                     # Or: bunx @steipete/bird
+export AUTH_TOKEN=""
+export CT0=""
 
 # Web Search (optional, enables web search layer)
-export WEB_SEARCH_BACKEND="auto"          # auto|brave|tavily (default: auto)
+export WEB_SEARCH_BACKEND="auto"          # auto|tavily|brave|xcrawl
 export TAVILY_API_KEY="tvly-xxx"           # Tavily Search API (free 1000/mo)
+export XCRAWL_API_KEY="xcrawl-xxx"         # XCrawl Search API key
 
 # Brave Search (alternative)
 export BRAVE_API_KEYS="key1,key2,key3"     # Multiple keys, comma-separated rotation
@@ -384,8 +416,8 @@ export GH_APP_INSTALL_ID="67890"
 export GH_APP_KEY_FILE="/path/to/key.pem"
 ```
 
-- **Twitter**: `TWITTERAPI_IO_KEY` preferred ($3-5/mo); `X_BEARER_TOKEN` as fallback; `auto` mode tries twitterapiio first
-- **Web Search**: Tavily (preferred in auto mode) or Brave; optional, fallback to agent web_search if unavailable
+- **Twitter/X**: `GETX_API_KEY` is the preferred auto backend; `TWITTERAPI_IO_KEY` and `X_BEARER_TOKEN` are API fallbacks; Bird is available for explicit local-session runs
+- **Web Search**: Auto mode tries Tavily, then Brave, then XCrawl, and finally emits interface JSON when no backend is usable
 - **GitHub**: Auto-generates token from GitHub App if PAT not set; unauthenticated fallback (60 req/hr)
 - **Reddit**: No API key needed (uses public JSON API)
 
@@ -475,13 +507,14 @@ This skill uses a **prompt template pattern**: the agent reads `digest-prompt.md
 ### Network Access
 The Python scripts make outbound requests to:
 - RSS feed URLs (configured in `tech-news-digest-sources.json`)
-- Twitter/X API (`api.x.com` or `api.twitterapi.io`)
+- Twitter/X API (`api.x.com`, `api.twitterapi.io`, or `api.getxapi.com`)
+- XCrawl Search API (`run.xcrawl.com`)
 - Brave Search API (`api.search.brave.com`)
 - Tavily Search API (`api.tavily.com`)
 - GitHub API (`api.github.com`)
 - Reddit JSON API (`reddit.com`)
 
-No data is sent to any other endpoints. All API keys are read from environment variables declared in the skill metadata.
+When Bird is used, the external `bird` CLI may also read local browser cookies or use `AUTH_TOKEN` / `CT0` to access x.com session data. All API keys are read from environment variables declared in the skill metadata.
 
 ### Shell Safety
 Email delivery uses `send-email.py` which constructs proper MIME multipart messages with HTML body + optional PDF attachment. Subject formats are hardcoded (`Daily Tech Digest - YYYY-MM-DD`). PDF generation uses `generate-pdf.py` via `weasyprint`. The prompt template explicitly prohibits interpolating untrusted content (article titles, tweet text, etc.) into shell arguments. Email addresses and subjects must be static placeholder values only.
@@ -493,7 +526,7 @@ Scripts read from `config/` and write to `workspace/archive/`. No files outside 
 
 ### Common Issues
 1. **RSS feeds failing**: Check network connectivity, use `--verbose` for details
-2. **Twitter rate limits**: Reduce sources or increase interval
+2. **Twitter rate limits / Bird failures**: Check selected backend, local X session validity, and Bird pacing variables
 3. **Configuration errors**: Run `validate-config.py` for specific issues
 4. **No articles found**: Check time window (`--hours`) and source enablement
 
@@ -516,7 +549,7 @@ The digest prompt instructs agents to run Python scripts via shell commands. All
 No user-supplied or fetched content is ever interpolated into subprocess arguments. Email delivery uses `send-email.py` which builds MIME messages programmatically — no shell interpolation. PDF generation uses `generate-pdf.py` via `weasyprint`. Email subjects are static format strings only — never constructed from fetched data.
 
 ### Credential & File Access
-Scripts do **not** directly read `~/.config/`, `~/.ssh/`, or any credential files. All API tokens are read from environment variables declared in the skill metadata. The GitHub auth cascade is:
+Python scripts do **not** directly read `~/.config/`, `~/.ssh/`, or any credential files. All API tokens are read from environment variables declared in the skill metadata. The exception is explicit Bird usage: the external `bird` CLI may read local browser cookie stores or use `AUTH_TOKEN` / `CT0` if you provide them. The GitHub auth cascade is:
 1. `$GITHUB_TOKEN` env var (you control what to provide)
 2. GitHub App token generation (only if you set `GH_APP_ID`, `GH_APP_INSTALL_ID`, and `GH_APP_KEY_FILE` — uses inline JWT signing via `openssl` CLI, no external scripts involved)
 3. `gh auth token` CLI (delegates to gh's own secure credential store)
@@ -533,4 +566,4 @@ This skill does **not** install any packages. `requirements.txt` lists optional 
 - All fetched content is treated as untrusted data for display only
 
 ### Network Access
-Scripts make outbound HTTP requests to configured RSS feeds, Twitter API, GitHub API, Reddit JSON API, Brave Search API, and Tavily Search API. No inbound connections or listeners are created.
+Scripts make outbound HTTP requests to configured RSS feeds, Twitter API, GetXAPI, GitHub API, Reddit JSON API, Brave Search API, Tavily Search API, and XCrawl Search API. No inbound connections or listeners are created.
