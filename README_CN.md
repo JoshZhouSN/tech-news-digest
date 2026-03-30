@@ -105,10 +105,10 @@ export AUTH_TOKEN="..."            # 如果 Bird 不直接读浏览器 cookie，
 export CT0="..."                   # 如果 Bird 不直接读浏览器 cookie，可手动提供
 export BIRD_MAX_WORKERS="1"        # Bird 默认串行执行
 export BIRD_REQUEST_INTERVAL_SEC="2.0"
-export BIRD_BATCH_SIZE="8"
-export BIRD_BATCH_COOLDOWN_SEC="30"
-export BIRD_429_COOLDOWN_SEC="90"
-export BIRD_MAX_CONSECUTIVE_429="3"
+export BIRD_BATCH_SIZE="25"        # 每完成 25 个账号后暂停
+export BIRD_BATCH_COOLDOWN_SEC="600"
+export BIRD_429_COOLDOWN_SEC="600" # 每次 429 都先冷却，再重试当前账号
+export BIRD_MAX_CONSECUTIVE_429="0" # 0 表示关闭旧的连续 429 止损
 # 网页搜索
 export TAVILY_API_KEY="tvly-xxx"   # Tavily Search API
 export BRAVE_API_KEYS="k1,k2,k3"   # Brave Search API 密钥（逗号分隔用于轮换）

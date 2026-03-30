@@ -147,10 +147,10 @@ class TestBirdBackendExecution(unittest.TestCase):
 
         self.assertEqual(backend.max_workers, 1)
         self.assertEqual(backend.request_interval_sec, 2.0)
-        self.assertEqual(backend.batch_size, 8)
-        self.assertEqual(backend.batch_cooldown_sec, 30.0)
-        self.assertEqual(backend.cooldown_429_sec, 90.0)
-        self.assertEqual(backend.max_consecutive_429, 3)
+        self.assertEqual(backend.batch_size, 25)
+        self.assertEqual(backend.batch_cooldown_sec, 600.0)
+        self.assertEqual(backend.cooldown_429_sec, 600.0)
+        self.assertEqual(backend.max_consecutive_429, 0)
 
     def test_reads_pacing_config_from_env(self):
         backend_cls = getattr(fetch_twitter, "BirdBackend", None)
@@ -316,6 +316,18 @@ class TestBirdBackendExecution(unittest.TestCase):
                 "articles": [],
             },
             {
+                "source_id": "a-twitter",
+                "source_type": "twitter",
+                "name": "a",
+                "handle": "a",
+                "priority": True,
+                "topics": ["llm"],
+                "status": "ok",
+                "attempts": 1,
+                "count": 1,
+                "articles": [],
+            },
+            {
                 "source_id": "b-twitter",
                 "source_type": "twitter",
                 "name": "b",
@@ -333,15 +345,15 @@ class TestBirdBackendExecution(unittest.TestCase):
 
         sleep_mock.assert_any_call(33.0)
 
-    def test_fetch_all_stops_after_consecutive_429_threshold(self):
+    def test_fetch_all_retries_same_source_after_429_until_recovered(self):
         backend_cls = getattr(fetch_twitter, "BirdBackend", None)
         backend = backend_cls(cli_command="bird")
         backend.request_interval_sec = 0.0
         backend.batch_size = 99
         backend.batch_cooldown_sec = 0.0
-        backend.cooldown_429_sec = 1.0
-        backend.max_consecutive_429 = 2
-        sources = [self._make_source("a"), self._make_source("b"), self._make_source("c")]
+        backend.cooldown_429_sec = 600.0
+        backend.max_consecutive_429 = 0
+        sources = [self._make_source("a"), self._make_source("b")]
         cutoff = fetch_twitter.datetime(2026, 3, 27, tzinfo=fetch_twitter.timezone.utc)
         rate_limit_item = {
             "source_type": "twitter",
@@ -353,19 +365,58 @@ class TestBirdBackendExecution(unittest.TestCase):
             "count": 0,
             "articles": [],
         }
+        ok_item = {
+            "source_type": "twitter",
+            "priority": True,
+            "topics": ["llm"],
+            "status": "ok",
+            "attempts": 1,
+            "count": 1,
+            "articles": [],
+        }
 
         with mock.patch.object(backend, "_fetch_user_tweets", side_effect=[
             {**rate_limit_item, "source_id": "a-twitter", "name": "a", "handle": "a"},
-            {**rate_limit_item, "source_id": "b-twitter", "name": "b", "handle": "b"},
+            {**ok_item, "source_id": "a-twitter", "name": "a", "handle": "a"},
+            {**ok_item, "source_id": "b-twitter", "name": "b", "handle": "b"},
         ]) as fetch_mock:
             with mock.patch.object(fetch_twitter.time, "sleep"):
                 results = backend.fetch_all(sources, cutoff)
 
-        self.assertEqual(fetch_mock.call_count, 2)
-        self.assertEqual(len(results), 3)
-        self.assertEqual(results[-1]["handle"], "c")
-        self.assertEqual(results[-1]["status"], "error")
-        self.assertIn("rate limit guard", results[-1]["error"].lower())
+        self.assertEqual(fetch_mock.call_count, 3)
+        self.assertEqual([item["handle"] for item in results], ["a", "b"])
+        self.assertEqual(results[0]["status"], "ok")
+        self.assertEqual(results[1]["status"], "ok")
+
+    def test_fetch_all_applies_batch_cooldown_after_25_sources(self):
+        backend_cls = getattr(fetch_twitter, "BirdBackend", None)
+        backend = backend_cls(cli_command="bird")
+        backend.request_interval_sec = 0.0
+        backend.batch_size = 25
+        backend.batch_cooldown_sec = 600.0
+        backend.cooldown_429_sec = 0.0
+        backend.max_consecutive_429 = 0
+        sources = [self._make_source(f"s{i}") for i in range(26)]
+        cutoff = fetch_twitter.datetime(2026, 3, 27, tzinfo=fetch_twitter.timezone.utc)
+        ok_item = {
+            "source_type": "twitter",
+            "priority": True,
+            "topics": ["llm"],
+            "status": "ok",
+            "attempts": 1,
+            "count": 1,
+            "articles": [],
+        }
+        side_effect = [
+            {**ok_item, "source_id": f"s{i}-twitter", "name": f"s{i}", "handle": f"s{i}"}
+            for i in range(26)
+        ]
+
+        with mock.patch.object(backend, "_fetch_user_tweets", side_effect=side_effect):
+            with mock.patch.object(fetch_twitter.time, "sleep") as sleep_mock:
+                backend.fetch_all(sources, cutoff)
+
+        sleep_mock.assert_any_call(600.0)
 
 
 if __name__ == "__main__":

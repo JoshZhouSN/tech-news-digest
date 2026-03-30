@@ -56,10 +56,10 @@ BIRD_DEFAULT_CLI = "bird"
 
 BIRD_DEFAULT_MAX_WORKERS = 1
 BIRD_DEFAULT_REQUEST_INTERVAL_SEC = 2.0
-BIRD_DEFAULT_BATCH_SIZE = 8
-BIRD_DEFAULT_BATCH_COOLDOWN_SEC = 30.0
-BIRD_DEFAULT_429_COOLDOWN_SEC = 90.0
-BIRD_DEFAULT_MAX_CONSECUTIVE_429 = 3
+BIRD_DEFAULT_BATCH_SIZE = 25
+BIRD_DEFAULT_BATCH_COOLDOWN_SEC = 600.0
+BIRD_DEFAULT_429_COOLDOWN_SEC = 600.0
+BIRD_DEFAULT_MAX_CONSECUTIVE_429 = 0
 
 
 def setup_logging(verbose: bool) -> logging.Logger:
@@ -861,42 +861,53 @@ class BirdBackend(TwitterBackend):
     def fetch_all(self, sources: List[Dict[str, Any]], cutoff: datetime) -> List[Dict[str, Any]]:
         results: List[Dict[str, Any]] = []
         total = len(sources)
-        done = 0
         consecutive_429 = 0
+        index = 0
 
-        for index, source in enumerate(sources, start=1):
-            if consecutive_429 >= self.max_consecutive_429:
+        while index < total:
+            source = sources[index]
+
+            if self.max_consecutive_429 > 0 and consecutive_429 >= self.max_consecutive_429:
                 result = self._make_error(
                     source,
                     f"Bird rate limit guard activated after {self.max_consecutive_429} consecutive 429 errors",
                     0,
                 )
                 results.append(result)
-                done += 1
-                logging.warning(f"[{done}/{total}] ❌ @{result['handle']}: {result['error']}")
+                logging.warning(f"[{len(results)}/{total}] ❌ @{result['handle']}: {result['error']}")
+                index += 1
                 continue
 
             result = self._fetch_user_tweets(source, cutoff)
-            results.append(result)
-            done += 1
-
-            if result["status"] == "ok":
-                logging.info(f"[{done}/{total}] ✅ @{result['handle']}: {result['count']} tweets"
-                             + (f" (top: {result['articles'][0]['metrics']['like_count']}❤️)" if result['articles'] else ""))
-            else:
-                logging.warning(f"[{done}/{total}] ❌ @{result['handle']}: {result['error']}")
 
             if self._is_rate_limit_error(result):
                 consecutive_429 += 1
+                logging.warning(
+                    f"[{len(results) + 1}/{total}] ⚠️ @{source['handle'].lstrip('@')}: "
+                    f"{result['error']} | cooling down {self.cooldown_429_sec:.0f}s and retrying same source"
+                )
                 if self.cooldown_429_sec > 0:
                     time.sleep(self.cooldown_429_sec)
-            else:
-                consecutive_429 = 0
+                continue
 
+            consecutive_429 = 0
+            results.append(result)
+
+            if result["status"] == "ok":
+                logging.info(f"[{len(results)}/{total}] ✅ @{result['handle']}: {result['count']} tweets"
+                             + (f" (top: {result['articles'][0]['metrics']['like_count']}❤️)" if result['articles'] else ""))
+            else:
+                logging.warning(f"[{len(results)}/{total}] ❌ @{result['handle']}: {result['error']}")
+
+            index += 1
             if index >= total:
                 continue
 
             if self.batch_size > 0 and index % self.batch_size == 0 and self.batch_cooldown_sec > 0:
+                logging.info(
+                    f"[{len(results)}/{total}] Bird batch limit reached ({self.batch_size}); "
+                    f"cooling down {self.batch_cooldown_sec:.0f}s before continuing"
+                )
                 time.sleep(self.batch_cooldown_sec)
 
             if self.request_interval_sec > 0:
