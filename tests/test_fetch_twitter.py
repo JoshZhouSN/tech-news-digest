@@ -148,8 +148,8 @@ class TestBirdBackendExecution(unittest.TestCase):
         self.assertEqual(backend.max_workers, 1)
         self.assertEqual(backend.request_interval_sec, 2.0)
         self.assertEqual(backend.batch_size, 25)
-        self.assertEqual(backend.batch_cooldown_sec, 600.0)
-        self.assertEqual(backend.cooldown_429_sec, 600.0)
+        self.assertEqual(backend.batch_cooldown_sec, 900.0)
+        self.assertEqual(backend.cooldown_429_sec, 900.0)
         self.assertEqual(backend.max_consecutive_429, 0)
 
     def test_reads_pacing_config_from_env(self):
@@ -351,7 +351,7 @@ class TestBirdBackendExecution(unittest.TestCase):
         backend.request_interval_sec = 0.0
         backend.batch_size = 99
         backend.batch_cooldown_sec = 0.0
-        backend.cooldown_429_sec = 600.0
+        backend.cooldown_429_sec = 900.0
         backend.max_consecutive_429 = 0
         sources = [self._make_source("a"), self._make_source("b")]
         cutoff = fetch_twitter.datetime(2026, 3, 27, tzinfo=fetch_twitter.timezone.utc)
@@ -393,7 +393,7 @@ class TestBirdBackendExecution(unittest.TestCase):
         backend = backend_cls(cli_command="bird")
         backend.request_interval_sec = 0.0
         backend.batch_size = 25
-        backend.batch_cooldown_sec = 600.0
+        backend.batch_cooldown_sec = 900.0
         backend.cooldown_429_sec = 0.0
         backend.max_consecutive_429 = 0
         sources = [self._make_source(f"s{i}") for i in range(26)]
@@ -416,7 +416,7 @@ class TestBirdBackendExecution(unittest.TestCase):
             with mock.patch.object(fetch_twitter.time, "sleep") as sleep_mock:
                 backend.fetch_all(sources, cutoff)
 
-        sleep_mock.assert_any_call(600.0)
+        sleep_mock.assert_any_call(900.0)
 
 
 if __name__ == "__main__":

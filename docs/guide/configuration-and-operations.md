@@ -33,12 +33,12 @@ python3 -m pip install -r requirements.txt
   - `BIRD_MAX_WORKERS`：Bird 抓取并发数，默认 `1`
   - `BIRD_REQUEST_INTERVAL_SEC`：账号之间的等待秒数，默认 `2`
   - `BIRD_BATCH_SIZE`：每批账号数，默认 `25`
-  - `BIRD_BATCH_COOLDOWN_SEC`：每批结束后的额外冷却秒数，默认 `600`
-  - `BIRD_429_COOLDOWN_SEC`：每次遇到 `429` 后的冷却秒数，默认 `600`
+  - `BIRD_BATCH_COOLDOWN_SEC`：每批结束后的额外冷却秒数，默认 `900`
+  - `BIRD_429_COOLDOWN_SEC`：每次遇到 `429` 后的冷却秒数，默认 `900`
   - `BIRD_MAX_CONSECUTIVE_429`：连续 `429` 达到多少次后触发旧止损逻辑，默认 `0`（关闭）
 - 默认恢复策略：
-  - 每成功完成 `25` 个账号后，Bird 自动休眠 `10` 分钟，再从下一个账号继续
-  - 每次遇到 `429` 时，Bird 自动休眠 `10` 分钟，然后重试当前账号，不会直接跳过断点
+  - 每成功完成 `25` 个账号后，Bird 自动休眠 `15` 分钟，再从下一个账号继续
+  - 每次遇到 `429` 时，Bird 自动休眠 `15` 分钟，然后重试当前账号，不会直接跳过断点
 
 ## 2. 用户覆盖配置
 

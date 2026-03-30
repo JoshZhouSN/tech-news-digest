@@ -109,8 +109,8 @@ export CT0="..."                   # optional if Bird reads cookies from browser
 export BIRD_MAX_WORKERS="1"        # keep Bird serialized by default
 export BIRD_REQUEST_INTERVAL_SEC="2.0"
 export BIRD_BATCH_SIZE="25"        # pause after each 25 completed accounts
-export BIRD_BATCH_COOLDOWN_SEC="600"
-export BIRD_429_COOLDOWN_SEC="600" # every 429 cools down, then retries same account
+export BIRD_BATCH_COOLDOWN_SEC="900"
+export BIRD_429_COOLDOWN_SEC="900" # every 429 cools down, then retries same account
 export BIRD_MAX_CONSECUTIVE_429="0" # 0 disables the old rate-limit guard
 # Web Search
 export TAVILY_API_KEY="tvly-xxx"   # Tavily Search API
