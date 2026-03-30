@@ -763,6 +763,7 @@ class BirdBackend(TwitterBackend):
         self.max_consecutive_429 = _get_env_int(
             "BIRD_MAX_CONSECUTIVE_429",
             BIRD_DEFAULT_MAX_CONSECUTIVE_429,
+            minimum=0,
         )
 
     @staticmethod

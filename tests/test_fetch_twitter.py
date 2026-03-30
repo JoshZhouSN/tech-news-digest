@@ -173,6 +173,17 @@ class TestBirdBackendExecution(unittest.TestCase):
         self.assertEqual(backend.cooldown_429_sec, 33.0)
         self.assertEqual(backend.max_consecutive_429, 4)
 
+    def test_preserves_zero_for_disabled_consecutive_429_guard(self):
+        backend_cls = getattr(fetch_twitter, "BirdBackend", None)
+        self.assertIsNotNone(backend_cls, "BirdBackend should exist")
+
+        with mock.patch.dict(os.environ, {
+            "BIRD_MAX_CONSECUTIVE_429": "0",
+        }, clear=True):
+            backend = backend_cls(cli_command="bird")
+
+        self.assertEqual(backend.max_consecutive_429, 0)
+
     def test_fetch_all_processes_sources_in_order(self):
         backend_cls = getattr(fetch_twitter, "BirdBackend", None)
         self.assertIsNotNone(backend_cls, "BirdBackend should exist")
