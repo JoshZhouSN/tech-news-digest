@@ -24,7 +24,7 @@ class TestRunDailyDigest(unittest.TestCase):
             archive_dir=Path("/tmp/archive"),
             hours=48,
             freshness="pd",
-            step_timeout=420,
+            step_timeout=1800,
             only="twitter,github,trending,reddit,web",
             twitter_backend="bird",
         )
@@ -36,7 +36,7 @@ class TestRunDailyDigest(unittest.TestCase):
         self.assertIn("--twitter-backend", cmd)
         self.assertIn("bird", cmd)
         self.assertIn("--step-timeout", cmd)
-        self.assertIn("420", cmd)
+        self.assertIn("1800", cmd)
         self.assertIn("--force", cmd)
 
 

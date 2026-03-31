@@ -92,7 +92,7 @@ def main() -> int:
     parser.add_argument("--report-prefix", type=str, default="daily", help="Markdown filename prefix")
     parser.add_argument("--hours", type=int, default=48, help="Pipeline lookback window")
     parser.add_argument("--freshness", type=str, default="pd", help="Web freshness window")
-    parser.add_argument("--step-timeout", type=int, default=420, help="Per-source timeout forwarded to run-pipeline.py")
+    parser.add_argument("--step-timeout", type=int, default=1800, help="Per-source timeout forwarded to run-pipeline.py")
     parser.add_argument("--only", type=str, default="twitter,github,trending,reddit,web", help="Comma-separated source groups")
     parser.add_argument("--twitter-backend", choices=["official", "twitterapiio", "getxapi", "bird", "auto"], default=None)
     parser.add_argument("--top-per-topic", type=int, default=5)
