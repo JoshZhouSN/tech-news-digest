@@ -65,6 +65,7 @@ What to expect:
 - Merged digest JSON at `/tmp/td-merged.json`
 - Pipeline metadata at `/tmp/td-merged.meta.json`
 - Optional user overrides in `workspace/config/`
+- Without X or web-search credentials, the pipeline still runs, but Twitter/X and web search may contribute `0` items on the first run
 
 ## What You Get
 
@@ -255,7 +256,7 @@ Run unit tests:
 python3 -m unittest discover -s tests -v
 ```
 
-Current offline test baseline: 65 tests passing.
+Current offline test baseline: 67 tests passing.
 
 ## Dependencies
 

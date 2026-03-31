@@ -65,6 +65,7 @@ python3 scripts/run-pipeline.py \
 - 汇总结果：`/tmp/td-merged.json`
 - 本次流水线元数据：`/tmp/td-merged.meta.json`
 - 你的自定义覆盖配置：`workspace/config/`
+- 如果没有 X 或网页搜索相关凭证，流水线仍可跑完，但首轮运行里 X 和网页搜索可能都是 `0` 条
 
 ## 这个项目会产出什么
 
@@ -255,7 +256,7 @@ bash scripts/test-pipeline.sh --only rss,github,web --hours 24
 python3 -m unittest discover -s tests -v
 ```
 
-当前离线测试基线：65 项通过。
+当前离线测试基线：67 项通过。
 
 ## 依赖
 

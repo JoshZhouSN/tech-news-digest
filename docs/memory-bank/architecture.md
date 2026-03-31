@@ -1,6 +1,6 @@
 # 架构与数据流
 
-- 更新时间：2026-03-30
+- 更新时间：2026-03-31
 - 适用范围：理解系统结构、评估改动影响、定位问题
 
 ## 1. 总体结构
@@ -54,7 +54,7 @@ run-pipeline.py
 
 其中：
 
-- `fetch-twitter.py` 支持官方 API、GetXAPI、twitterapi.io，以及显式可选的 Bird CLI
+- `fetch-twitter.py` 支持官方 API、GetXAPI、twitterapi.io，以及可显式启用且可在 auto 模式下兜底的 Bird CLI
 - `fetch-web.py` 支持 Tavily、Brave、XCrawl，以及在无可用凭证时生成 interface JSON
 
 ### 处理层
@@ -126,7 +126,7 @@ run-pipeline.py
 
 ## 7. 当前质量门槛
 
-- 单元测试：`65` 项通过
+- 单元测试：`67` 项通过
 - CI：仅验证离线单元测试
 - 夹具来源：`tests/fixtures/*.json`
 

@@ -12,7 +12,7 @@ metadata:
 env:
   - name: TWITTER_API_BACKEND
     required: false
-    description: "Twitter/X backend: 'auto', 'getxapi', 'twitterapiio', 'official', or 'bird' (Bird is explicit opt-in on current main)"
+    description: "Twitter/X backend: 'auto', 'getxapi', 'twitterapiio', 'official', or 'bird' (auto falls back to Bird when API credentials are unavailable and Bird CLI is usable)"
   - name: GETX_API_KEY
     required: false
     description: GetXAPI key for X/Twitter collection (preferred auto backend)
@@ -95,7 +95,7 @@ Automated tech news digest system with unified data source model, quality scorin
    - `GETX_API_KEY` - GetXAPI key for X/Twitter collection (optional, preferred auto backend)
    - `TWITTERAPI_IO_KEY` - twitterapi.io API key (optional, preferred)
    - `X_BEARER_TOKEN` - Twitter/X official API bearer token (optional, fallback)
-   - `BIRD_CLI` - Bird CLI command for local X session access (optional, explicit Bird backend)
+   - `BIRD_CLI` - Bird CLI command for local X session access (optional, explicit backend or auto fallback when API credentials are unavailable)
    - `AUTH_TOKEN` / `CT0` - Optional X session tokens for Bird when browser cookies are unavailable
    - `TAVILY_API_KEY` - Tavily Search API key (optional, first auto web backend)
    - `XCRAWL_API_KEY` - XCrawl Search API key (optional, explicit backend or auto fallback)
@@ -200,8 +200,8 @@ python3 scripts/fetch-rss.py [--defaults DIR] [--config DIR] [--hours 48] [--out
 ```bash
 python3 scripts/fetch-twitter.py [--defaults DIR] [--config DIR] [--hours 48] [--output FILE] [--backend auto|getxapi|official|twitterapiio|bird]
 ```
-- Backend auto-detection on current main: `getxapi -> twitterapiio -> official`
-- Bird CLI is available as an explicit backend for local X session access (`--backend bird`)
+- Backend auto-detection on current main: `getxapi -> twitterapiio -> official -> bird`
+- Bird CLI can be selected explicitly for local X session access (`--backend bird`) and is also the final fallback in `auto`
 - Rate limit handling, engagement metrics, retry with backoff
 
 #### `fetch-web.py` - Web Search Engine
@@ -394,7 +394,7 @@ export TWITTERAPI_IO_KEY="your_key"        # twitterapi.io key
 export X_BEARER_TOKEN="your_bearer_token"  # Official X API v2 fallback
 export TWITTER_API_BACKEND="auto"          # auto|getxapi|twitterapiio|official|bird
 
-# Bird (explicit local-session backend)
+# Bird (explicit local-session backend, or auto fallback when API credentials are unavailable)
 export BIRD_CLI="bird"                     # Or: bunx @steipete/bird
 export AUTH_TOKEN=""
 export CT0=""
@@ -416,7 +416,7 @@ export GH_APP_INSTALL_ID="67890"
 export GH_APP_KEY_FILE="/path/to/key.pem"
 ```
 
-- **Twitter/X**: `GETX_API_KEY` is the preferred auto backend; `TWITTERAPI_IO_KEY` and `X_BEARER_TOKEN` are API fallbacks; Bird is available for explicit local-session runs
+- **Twitter/X**: `GETX_API_KEY` is the preferred auto backend; `TWITTERAPI_IO_KEY` and `X_BEARER_TOKEN` are API fallbacks; Bird is available for explicit local-session runs and as the final `auto` fallback when available
 - **Web Search**: Auto mode tries Tavily, then Brave, then XCrawl, and finally emits interface JSON when no backend is usable
 - **GitHub**: Auto-generates token from GitHub App if PAT not set; unauthenticated fallback (60 req/hr)
 - **Reddit**: No API key needed (uses public JSON API)

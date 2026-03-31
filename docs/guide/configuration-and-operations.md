@@ -1,6 +1,6 @@
 # 配置与运行指南
 
-- 更新时间：2026-03-30
+- 更新时间：2026-03-31
 - 适用范围：本地运行、环境准备、联调排障
 
 ## 1. 本地准备
@@ -160,7 +160,7 @@ bash scripts/test-pipeline.sh --only rss,github,web --hours 24
 python3 -m unittest discover -s tests -v
 ```
 
-当前离线基线：`65` 项通过。
+当前离线基线：`67` 项通过。
 
 ## 6. 排障入口
 
