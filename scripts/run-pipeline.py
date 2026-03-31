@@ -76,8 +76,10 @@ def run_step(
             try:
                 with open(output_path) as f:
                     data = json.load(f)
+                output_stats = data.get("output_stats", {})
                 count = (
                     data.get("total_articles")
+                    or output_stats.get("total_articles")
                     or data.get("total_posts")
                     or data.get("total_releases")
                     or data.get("total_results")
