@@ -58,12 +58,19 @@ python3 scripts/run-pipeline.py \
   --archive-dir workspace/archive/tech-news-digest \
   --output /tmp/td-merged.json \
   --verbose
+
+python3 scripts/run-daily-digest.py \
+  --defaults config/defaults \
+  --config workspace/config \
+  --archive-dir workspace/archive/tech-news-digest \
+  --timezone Asia/Shanghai
 ```
 
 跑完后你会看到：
 
 - 汇总结果：`/tmp/td-merged.json`
 - 本次流水线元数据：`/tmp/td-merged.meta.json`
+- Markdown 日报：`workspace/archive/tech-news-digest/daily-YYYY-MM-DD.md`
 - 你的自定义覆盖配置：`workspace/config/`
 - 如果没有 X 或网页搜索相关凭证，流水线仍可跑完，但首轮运行里 X 和网页搜索可能都是 `0` 条
 
@@ -90,6 +97,7 @@ run-pipeline.py
   -> fetch-reddit.py
   -> fetch-web.py
   -> merge-sources.py
+  -> generate-markdown.py
   -> enrich-articles.py (可选)
   -> 下游模板或投递脚本
 ```
@@ -244,6 +252,16 @@ python3 scripts/run-pipeline.py \
   --verbose
 ```
 
+跑“抓取 + Markdown 日报”一体化命令：
+
+```bash
+python3 scripts/run-daily-digest.py \
+  --defaults config/defaults \
+  --config workspace/config \
+  --archive-dir workspace/archive/tech-news-digest \
+  --timezone Asia/Shanghai
+```
+
 跑轻量烟雾测试：
 
 ```bash
@@ -256,7 +274,7 @@ bash scripts/test-pipeline.sh --only rss,github,web --hours 24
 python3 -m unittest discover -s tests -v
 ```
 
-当前离线测试基线：67 项通过。
+当前离线测试基线：70 项通过。
 
 ## 依赖
 

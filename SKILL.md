@@ -235,6 +235,31 @@ python3 scripts/fetch-reddit.py [--defaults DIR] [--config DIR] [--hours 48] [--
 - 13 subreddits with score filtering
 
 
+#### `generate-markdown.py` - Deterministic Markdown Daily Report
+```bash
+python3 scripts/generate-markdown.py \
+  --input /tmp/td-merged.json \
+  --defaults config/defaults \
+  --config workspace/config \
+  --date 2026-03-31 \
+  --output workspace/archive/tech-news-digest/daily-2026-03-31.md
+```
+- Renders a Simplified Chinese markdown daily report directly from merged JSON
+- Keeps fixed sections for topic picks, KOL updates, GitHub releases, GitHub trending, and footer stats
+- Uses source counts from merged metadata, so empty sources are called out instead of fabricated
+
+#### `run-daily-digest.py` - One-Shot Daily Pipeline + Markdown Output
+```bash
+python3 scripts/run-daily-digest.py \
+  --defaults config/defaults \
+  --config workspace/config \
+  --archive-dir workspace/archive/tech-news-digest \
+  --timezone Asia/Shanghai
+```
+- Runs the collection pipeline for `twitter,github,trending,reddit,web`
+- Resolves the report date at runtime from the target timezone
+- Writes `daily-YYYY-MM-DD.md` and removes reports older than 90 days
+
 #### `enrich-articles.py` - Article Full-Text Enrichment
 ```bash
 python3 scripts/enrich-articles.py --input merged.json --output enriched.json [--min-score 10] [--max-articles 15] [--verbose]

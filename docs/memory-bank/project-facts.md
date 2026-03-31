@@ -19,7 +19,7 @@
 - 主语言：Python
 - Python 版本要求：`3.8+`
 - 测试方式：`unittest`
-- 当前离线测试结果：`67` 项通过
+- 当前离线测试结果：`70` 项通过
 - CI 方式：GitHub Actions
 
 ## 3. 仓库结构
@@ -44,6 +44,16 @@ python3 scripts/run-pipeline.py \
   --archive-dir workspace/archive/tech-news-digest \
   --output /tmp/td-merged.json \
   --verbose
+```
+
+### 直接产出 Markdown 日报
+
+```bash
+python3 scripts/run-daily-digest.py \
+  --defaults config/defaults \
+  --config workspace/config \
+  --archive-dir workspace/archive/tech-news-digest \
+  --timezone Asia/Shanghai
 ```
 
 ### 跑配置校验

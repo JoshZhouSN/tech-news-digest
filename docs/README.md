@@ -15,7 +15,7 @@
 - 抓取步骤：`6`
 - X 层支持 Bird 显式启用，并可在 auto 模式下作为最后兜底
 - Web 搜索支持 `tavily -> brave -> xcrawl -> interface` 自动兜底
-- 离线单元测试：`67` 项通过
+- 离线单元测试：`70` 项通过
 
 ## 2. 文档地图
 
@@ -35,7 +35,7 @@
 - 主入口：`scripts/run-pipeline.py`
 - 本地环境模板：`.env.example`
 - 配置入口：`config/defaults/` + `workspace/config/`
-- 当前测试结果：`67` 项单元测试通过
+- 当前测试结果：`70` 项单元测试通过
 - CI：`.github/workflows/test.yml` 在 Python `3.9` 和 `3.12` 上运行
 
 ## 4. 建议阅读顺序

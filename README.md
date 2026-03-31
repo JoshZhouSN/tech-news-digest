@@ -58,12 +58,19 @@ python3 scripts/run-pipeline.py \
   --archive-dir workspace/archive/tech-news-digest \
   --output /tmp/td-merged.json \
   --verbose
+
+python3 scripts/run-daily-digest.py \
+  --defaults config/defaults \
+  --config workspace/config \
+  --archive-dir workspace/archive/tech-news-digest \
+  --timezone Asia/Shanghai
 ```
 
 What to expect:
 
 - Merged digest JSON at `/tmp/td-merged.json`
 - Pipeline metadata at `/tmp/td-merged.meta.json`
+- Daily markdown report at `workspace/archive/tech-news-digest/daily-YYYY-MM-DD.md`
 - Optional user overrides in `workspace/config/`
 - Without X or web-search credentials, the pipeline still runs, but Twitter/X and web search may contribute `0` items on the first run
 
@@ -90,6 +97,7 @@ run-pipeline.py
   -> fetch-reddit.py
   -> fetch-web.py
   -> merge-sources.py
+  -> generate-markdown.py
   -> enrich-articles.py (optional)
   -> downstream templates / delivery
 ```
@@ -244,6 +252,16 @@ python3 scripts/run-pipeline.py \
   --verbose
 ```
 
+Run the daily markdown flow:
+
+```bash
+python3 scripts/run-daily-digest.py \
+  --defaults config/defaults \
+  --config workspace/config \
+  --archive-dir workspace/archive/tech-news-digest \
+  --timezone Asia/Shanghai
+```
+
 Run a lightweight smoke test:
 
 ```bash
@@ -256,7 +274,7 @@ Run unit tests:
 python3 -m unittest discover -s tests -v
 ```
 
-Current offline test baseline: 67 tests passing.
+Current offline test baseline: 70 tests passing.
 
 ## Dependencies
 

@@ -119,6 +119,22 @@ python3 scripts/run-pipeline.py \
   --verbose
 ```
 
+### 直接产出 Markdown 日报
+
+```bash
+python3 scripts/run-daily-digest.py \
+  --defaults config/defaults \
+  --config workspace/config \
+  --archive-dir workspace/archive/tech-news-digest \
+  --timezone Asia/Shanghai
+```
+
+这个命令会做三件事：
+
+- 先跑 `twitter,github,trending,reddit,web` 这几类来源
+- 再把合并结果渲染成固定结构的中文 Markdown 日报
+- 最后按当天日期写到 `workspace/archive/tech-news-digest/daily-YYYY-MM-DD.md`
+
 ### 单独验证网页搜索层
 
 ```bash
@@ -160,7 +176,7 @@ bash scripts/test-pipeline.sh --only rss,github,web --hours 24
 python3 -m unittest discover -s tests -v
 ```
 
-当前离线基线：`67` 项通过。
+当前离线基线：`70` 项通过。
 
 ## 6. 排障入口
 
